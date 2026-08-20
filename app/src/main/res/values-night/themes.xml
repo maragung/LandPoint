@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+      The dark counterpart. This is what removes the white flash: the window is
+      already near-black before Compose draws its first frame.
+
+      Note this follows the *system* dark setting, which is all a resource
+      qualifier can see. A user who forces Dark in Settings while the system is
+      light still gets a light first frame for a few milliseconds — the app
+      preference lives in DataStore and cannot be read this early.
+    -->
+    <style name="Theme.LandPoint" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/window_background_dark</item>
+        <item name="android:colorBackground">@color/window_background_dark</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+</resources>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+      Framework attributes only. The parent is a plain android:Theme.Material,
+      not AppCompat, so AppCompat-only attributes would not resolve here.
+
+      windowBackground is the point of this file: without it the window is white
+      until Compose draws, which flashes on every launch in dark mode. The night
+      variant in values-night/ supplies the dark counterpart. No splash-screen
+      library is involved.
+    -->
+    <style name="Theme.LandPoint" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:colorBackground">@color/window_background</item>
+        <!-- enableEdgeToEdge() draws behind both bars; Compose tints the icons. -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
+</resources>

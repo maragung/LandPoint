@@ -1,0 +1,362 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Brand -->
+    <string name="app_name">LandPoint</string>
+    <string name="app_tagline">Save Your Land. Know Your Location.</string>
+    <string name="legal_disclaimer">GPS coordinates are for personal reference only — not a substitute for official land certificates or legal surveying.</string>
+
+    <!-- Common actions -->
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_back">Back</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_share">Share</string>
+    <string name="action_search">Search</string>
+    <string name="action_sort">Sort</string>
+    <string name="action_map">Map</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_navigate">Navigate</string>
+    <string name="action_compass">Compass</string>
+    <string name="action_export_pdf">Export PDF</string>
+    <string name="action_more">More</string>
+    <string name="action_undo">Undo</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_lands">Lands</string>
+    <string name="nav_map">Map</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Land list -->
+    <string name="list_search_placeholder">Search name, notes, address</string>
+    <string name="list_fab_save_land">Save land</string>
+    <string name="list_empty_title">No land saved yet</string>
+    <string name="list_empty_body">Tap Save land to record your first GPS location.</string>
+    <string name="list_no_matches_title">No matches</string>
+    <string name="list_no_matches_body">Try a different search term.</string>
+    <string name="card_navigate_to">Navigate to %1$s</string>
+    <string name="list_search_clear">Clear search</string>
+    <!-- Summary above the list: how many lands are shown, then their total area -->
+    <plurals name="list_summary">
+        <item quantity="one">%1$d land</item>
+        <item quantity="other">%1$d lands</item>
+    </plurals>
+    <string name="list_summary_total_area">%1$s total</string>
+    <string name="label_shape_point">Single point</string>
+    <string name="label_shape_polygon">Measured boundary</string>
+    <string name="msg_delete_undone">Delete undone</string>
+
+    <string name="sort_date_desc">Newest first</string>
+    <string name="sort_date_asc">Oldest first</string>
+    <string name="sort_name_asc">Name A–Z</string>
+    <string name="sort_name_desc">Name Z–A</string>
+    <string name="sort_distance">Nearest first</string>
+    <string name="sort_area_desc">Largest area first</string>
+    <string name="sort_area_asc">Smallest area first</string>
+
+    <!-- Selecting several lands at once -->
+    <string name="action_select">Select</string>
+    <string name="action_select_all">Select all shown</string>
+    <string name="action_clear_selection">Clear selection</string>
+    <string name="action_export_selected">Export selected</string>
+    <string name="action_delete_selected">Delete selected</string>
+    <plurals name="selection_count">
+        <item quantity="one">%1$d selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
+    <plurals name="msg_deleted">
+        <item quantity="one">%1$d location deleted</item>
+        <item quantity="other">%1$d locations deleted</item>
+    </plurals>
+    <plurals name="delete_selected_dialog_title">
+        <item quantity="one">Delete %1$d location?</item>
+        <item quantity="other">Delete %1$d locations?</item>
+    </plurals>
+    <string name="delete_selected_dialog_body">These locations and their photos will be removed from this device and cannot be recovered.</string>
+    <string name="export_selected_dialog_title">Export selected as</string>
+
+    <!-- Location permission -->
+    <string name="permission_title">Location permission needed</string>
+    <string name="permission_body">LandPoint needs location access to capture GPS coordinates. Nothing leaves your device.</string>
+    <string name="permission_grant">Grant permission</string>
+
+    <!-- Editor -->
+    <string name="edit_title_new">Save land</string>
+    <string name="edit_title_edit">Edit land</string>
+    <string name="edit_section_details">Land details</string>
+    <string name="edit_section_notes">Description and notes</string>
+    <string name="field_name">Name *</string>
+    <string name="field_name_hint">e.g. North rice field</string>
+    <string name="field_latitude">Latitude *</string>
+    <string name="field_longitude">Longitude *</string>
+    <string name="field_parcel_number">Parcel number</string>
+    <string name="field_description">Description</string>
+    <string name="field_notes">Notes</string>
+    <string name="edit_find_address">Find address</string>
+    <string name="edit_looking_up">Looking up…</string>
+    <string name="edit_use_my_location">Use my location</string>
+    <string name="edit_getting_fix">Getting fix…</string>
+    <string name="edit_accuracy">Accuracy ±%1$d m</string>
+    <string name="edit_altitude">Altitude %1$d m</string>
+    <string name="edit_averaging">Averaging… hold still</string>
+    <string name="edit_quality_excellent">Excellent</string>
+    <string name="edit_quality_good">Good</string>
+    <string name="edit_quality_fair">Fair</string>
+    <string name="edit_quality_poor">Poor</string>
+    <string name="edit_network_only">Cell tower / Wi-Fi only — go outdoors for a sharper fix</string>
+    <plurals name="edit_rejected">
+        <item quantity="one">%1$d outlier discarded</item>
+        <item quantity="other">%1$d outliers discarded</item>
+    </plurals>
+    <plurals name="edit_samples">
+        <item quantity="one">%1$d reading</item>
+        <item quantity="other">%1$d readings</item>
+    </plurals>
+
+    <!-- Boundary -->
+    <string name="boundary_title">Boundary</string>
+    <string name="boundary_hint">Stand at each corner and tap Add corner. Three or more corners give an area.</string>
+    <string name="boundary_add">Add corner</string>
+    <string name="boundary_capturing">Measuring corner…</string>
+    <string name="boundary_undo">Undo</string>
+    <string name="boundary_clear">Clear</string>
+    <string name="boundary_area">Area</string>
+    <string name="boundary_perimeter">Perimeter %1$s m</string>
+    <plurals name="boundary_need_more">
+        <item quantity="one">Add %1$d more corner to close the shape</item>
+        <item quantity="other">Add %1$d more corners to close the shape</item>
+    </plurals>
+    <plurals name="boundary_corners">
+        <item quantity="one">%1$d corner</item>
+        <item quantity="other">%1$d corners</item>
+    </plurals>
+    <string name="msg_corner_too_close">That is the same spot as the last corner</string>
+
+    <!-- Map corner picker -->
+    <string name="boundary_pick_on_map">Pick on map</string>
+    <string name="boundary_pin_centroid">Land pin: %1$s</string>
+    <string name="corner_picker_title">Mark the corners</string>
+    <string name="corner_picker_tap_hint">Tap the map to place a corner. Drag a corner to move it.</string>
+    <string name="corner_picker_no_map">No offline map imported, so the background is blank. Corners, area and your position still work.</string>
+    <string name="corner_picker_use_gps">Use my position</string>
+    <string name="corner_picker_done">Use this boundary</string>
+    <string name="corner_picker_cancel">Cancel</string>
+
+    <!-- Walk-around measurement -->
+    <string name="boundary_walk_start">Walk the boundary</string>
+    <string name="boundary_walk_stop">Finish walk</string>
+    <string name="boundary_walk_hint">For a boundary too long or too overgrown to stand on every corner. Walk the full edge and come back to where you started. Corner-by-corner stays the more accurate method.</string>
+    <string name="boundary_walk_recording">Recording · %1$s walked</string>
+    <string name="msg_walk_started">Walk the boundary and tap Finish walk when you return to the start</string>
+    <string name="msg_walk_too_short">Walk not recorded — too few usable GPS points. Try again in the open, or use Add corner.</string>
+    <plurals name="msg_walk_done">
+        <item quantity="one">Walk finished · %1$d corner</item>
+        <item quantity="other">Walk finished · %1$d corners</item>
+    </plurals>
+    <string name="msg_location_permission_needed">Location permission is needed for this</string>
+
+    <string name="photos_title">Photos</string>
+    <string name="photo_camera">Camera</string>
+    <string name="photo_gallery">Gallery</string>
+    <string name="photo_remove">Remove photo</string>
+    <string name="photo_description">Land photo</string>
+    <string name="photo_caption">Caption</string>
+    <string name="photo_caption_hint">e.g. boundary marker on the north side</string>
+    <string name="photo_caption_edit">Caption this photo</string>
+
+    <string name="error_name_required">Give this land a name</string>
+    <string name="error_coordinates_required">Capture or enter coordinates</string>
+    <string name="error_latitude_range">Latitude must be between -90 and 90</string>
+    <string name="error_longitude_range">Longitude must be between -180 and 180</string>
+
+    <string name="msg_location_off">Location is turned off. Enable GPS and try again.</string>
+    <string name="msg_no_fix">Could not get a GPS fix. Try again outdoors.</string>
+    <string name="msg_no_address">No address found for this point</string>
+    <string name="msg_photo_save_failed">Could not save photo</string>
+    <string name="msg_photo_import_failed">Could not import photo</string>
+    <string name="msg_no_camera_app">No camera app is available on this device</string>
+    <string name="msg_no_browser_app">No browser is available to open that link</string>
+
+    <!-- Detail -->
+    <string name="detail_title_fallback">Land</string>
+    <string name="detail_missing">This land no longer exists.</string>
+    <string name="detail_distance_away">%1$s away</string>
+    <string name="delete_dialog_title">Delete %1$s?</string>
+    <string name="delete_dialog_body">This removes the location and its photos from this device. It cannot be undone.</string>
+
+    <string name="label_coordinates">Coordinates</string>
+    <string name="label_description">Description</string>
+    <string name="label_notes">Notes</string>
+    <string name="label_parcel_number">Parcel number</string>
+    <string name="label_address">Address</string>
+    <string name="label_altitude">Altitude</string>
+    <string name="label_gps_accuracy">GPS accuracy</string>
+    <string name="label_area">Area</string>
+    <string name="label_perimeter">Perimeter</string>
+    <string name="label_saved">Saved</string>
+    <string name="label_last_edited">Last edited</string>
+
+    <string name="value_metres">%1$d m</string>
+    <string name="value_accuracy">±%1$d m</string>
+
+    <string name="msg_pdf_saved">PDF saved</string>
+
+    <!-- Compass -->
+    <string name="compass_title">Compass</string>
+    <string name="compass_waiting">Waiting for GPS fix…</string>
+    <string name="compass_no_sensor">No compass sensor on this device — the arrow shows the true bearing from your position instead of turning with the phone.</string>
+
+    <string-array name="cardinal_directions">
+        <item>N</item>
+        <item>NE</item>
+        <item>E</item>
+        <item>SE</item>
+        <item>S</item>
+        <item>SW</item>
+        <item>W</item>
+        <item>NW</item>
+    </string-array>
+
+    <!-- Map -->
+    <string name="map_title">Map</string>
+    <string name="map_my_location">My location</string>
+    <string name="map_you_are_here">You are here</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_language">Language</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_dynamic_color">Follow wallpaper colours</string>
+    <string name="settings_dynamic_color_hint">Takes the colours from your wallpaper instead of the LandPoint green. Android 12 and newer.</string>
+    <string name="settings_section_coordinate_format">Coordinate format</string>
+    <string name="settings_section_units">Distance units</string>
+    <string name="settings_section_backup">Backup and export</string>
+    <string name="settings_section_restore">Restore and import</string>
+    <string name="settings_section_about">About</string>
+
+    <plurals name="settings_stored_count">
+        <item quantity="one">%1$d location stored on this device.</item>
+        <item quantity="other">%1$d locations stored on this device.</item>
+    </plurals>
+
+    <string name="settings_backup_archive">Full backup (with photos)</string>
+    <string name="settings_backup_archive_hint">One file holding every location, boundary and photo. Keep it somewhere else — another phone, a memory card, your own cloud drive — so a lost or reset phone does not take your records with it.</string>
+    <string name="settings_backup_json">Backup to JSON</string>
+    <string name="settings_export_csv">Export CSV</string>
+    <string name="settings_export_pdf">Export PDF report</string>
+    <string name="settings_export_gpx">Export GPX (GPS apps)</string>
+    <string name="settings_export_kml">Export KML (Google Earth)</string>
+    <string name="settings_section_offline">Offline maps</string>
+    <string name="settings_offline_explainer">Map areas you have already viewed stay saved on this device and keep working without signal. To cover a whole province with no network at all, add a vector map file (.map) — it is drawn on your phone, so it uses no data. Prepared tile archives (.mbtiles, .gemf, .zip) also work.</string>
+    <string name="settings_offline_add">Add offline map file</string>
+    <string name="settings_offline_get">Download free maps (OpenAndroMaps)</string>
+    <string name="settings_offline_get_hint">Free vector maps per region, made from OpenStreetMap data. Download the .map file for your area in a browser, then add it here.</string>
+    <string name="settings_offline_kind_vector">Vector map, drawn on this device</string>
+    <string name="settings_offline_kind_raster">Tile archive</string>
+    <string name="map_attribution_osm">© OpenStreetMap contributors</string>
+    <string name="settings_offline_cached">Saved map tiles: %1$s</string>
+    <string name="settings_offline_none">No map files added</string>
+    <string name="action_remove">Remove</string>
+    <string name="settings_restore_archive">Restore full backup</string>
+    <string name="settings_restore_json">Restore from JSON</string>
+    <string name="settings_import_csv">Import CSV</string>
+    <string name="settings_duplicate_prompt">When an imported location already exists:</string>
+    <string name="settings_about_privacy">Everything stays on this device. No account, no tracking, no upload. Map tiles come from OpenStreetMap and are cached for offline use once viewed.</string>
+    <string name="settings_version">LandPoint %1$s</string>
+
+    <string name="language_system">Follow system</string>
+    <string name="language_english">English</string>
+    <string name="language_indonesian">Bahasa Indonesia</string>
+
+    <string name="dark_mode_system">Follow system</string>
+    <string name="dark_mode_light">Light</string>
+    <string name="dark_mode_dark">Dark</string>
+
+    <string name="units_metric">Metric (m, km)</string>
+    <string name="units_imperial">Imperial (ft, mi)</string>
+
+    <string name="coord_format_decimal">Decimal degrees (-6.914744, 107.609810)</string>
+    <string name="coord_format_dms">Degrees, minutes, seconds (6°54\'53\"S)</string>
+
+    <string name="settings_section_area_unit">Area unit</string>
+    <string name="area_unit_sqm">Square metres (m²)</string>
+    <string name="area_unit_are">Are (1 are = 100 m²)</string>
+    <string name="area_unit_hectare">Hectares (ha)</string>
+    <string name="area_unit_tumbak">Tumbak / bata (1 tumbak = 14 m²)</string>
+    <string name="area_unit_ubin">Ubin / ru (1 ubin = 14.0625 m²)</string>
+    <string name="area_unit_rante">Rante (1 rante = 400 m²)</string>
+    <string name="area_unit_bahu">Bahu (1 bahu = 7,096.5 m²)</string>
+    <string name="area_unit_acre">Acres (1 acre = 4,046.86 m²)</string>
+    <string name="value_area_sqm">%1$s m²</string>
+    <string name="value_area_are">%1$s are</string>
+    <string name="value_area_hectare">%1$s ha</string>
+    <string name="value_area_tumbak">%1$s tumbak</string>
+    <string name="value_area_ubin">%1$s ubin</string>
+    <string name="value_area_rante">%1$s rante</string>
+    <string name="value_area_bahu">%1$s bahu</string>
+    <string name="value_area_acre">%1$s ac</string>
+
+    <string name="duplicate_skip">Skip it — keep what I have</string>
+    <string name="duplicate_replace">Replace it with the imported one</string>
+    <string name="duplicate_keep_both">Keep both as separate locations</string>
+
+    <!-- Import / export results -->
+    <string name="msg_backup_failed">Backup failed: %1$s</string>
+    <plurals name="msg_backed_up">
+        <item quantity="one">Backed up %1$d location</item>
+        <item quantity="other">Backed up %1$d locations</item>
+    </plurals>
+    <string name="msg_csv_failed">CSV export failed: %1$s</string>
+    <string name="msg_backup_archive_done">Backup saved: %1$d locations, %2$d photos</string>
+    <string name="msg_backup_archive_partial">Backup saved: %1$d locations, %2$d photos. %3$d photo file(s) were missing and could not be included.</string>
+    <string name="msg_restore_failed">Restore failed: %1$s</string>
+    <plurals name="msg_restore_photos">
+        <item quantity="one">, %1$d photo restored</item>
+        <item quantity="other">, %1$d photos restored</item>
+    </plurals>
+    <plurals name="msg_exported">
+        <item quantity="one">Exported %1$d location</item>
+        <item quantity="other">Exported %1$d locations</item>
+    </plurals>
+    <string name="msg_pdf_failed">PDF export failed: %1$s</string>
+    <string name="msg_geo_export_failed">Map export failed: %1$s</string>
+    <string name="msg_offline_map_added">Offline map added: %1$s</string>
+    <string name="msg_offline_map_removed">Offline map removed: %1$s</string>
+    <string name="msg_offline_map_unsupported">Unsupported map file type: .%1$s</string>
+    <string name="msg_offline_map_failed">Could not add the offline map: %1$s</string>
+    <string name="msg_pdf_generic">PDF export failed</string>
+    <plurals name="msg_report_saved">
+        <item quantity="one">Report saved (%1$d location)</item>
+        <item quantity="other">Report saved (%1$d locations)</item>
+    </plurals>
+    <string name="msg_import_failed">Import failed: %1$s</string>
+    <string name="msg_import_imported">Imported %1$d</string>
+    <string name="msg_import_replaced">, replaced %1$d</string>
+    <plurals name="msg_import_skipped">
+        <item quantity="one">, skipped %1$d duplicate</item>
+        <item quantity="other">, skipped %1$d duplicates</item>
+    </plurals>
+    <plurals name="msg_import_invalid">
+        <item quantity="one">, ignored %1$d invalid row</item>
+        <item quantity="other">, ignored %1$d invalid rows</item>
+    </plurals>
+    <string name="msg_generic_error">Something went wrong: %1$s</string>
+
+    <!-- Sharing -->
+    <string name="share_parcel">Parcel: %1$s</string>
+    <string name="share_altitude">Altitude: %1$d m</string>
+    <string name="share_accuracy">Accuracy: ±%1$d m</string>
+    <string name="toast_no_maps_app">No maps app installed</string>
+    <string name="toast_no_file_handler">No app can open this file</string>
+    <string name="toast_no_share_app">No app available to share with</string>
+
+    <!-- PDF report -->
+    <string name="pdf_title_single">Land Location Record</string>
+    <string name="pdf_title_report">Land Locations Report</string>
+    <string name="pdf_exported_on">Exported %1$s</string>
+    <string name="pdf_count_exported">%1$d locations · exported %2$s</string>
+    <string name="pdf_footer_page">Generated by LandPoint · page %1$d</string>
+    <string name="pdf_footer_disclaimer">For personal reference only — not a legal survey document.</string>
+
+</resources>

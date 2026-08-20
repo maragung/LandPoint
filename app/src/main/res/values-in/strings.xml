@@ -1,0 +1,346 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Merek -->
+    <string name="app_name">LandPoint</string>
+    <string name="app_tagline">Simpan Tanah Anda. Ketahui Lokasinya.</string>
+    <string name="legal_disclaimer">Koordinat GPS hanya untuk catatan pribadi — bukan pengganti sertifikat tanah resmi atau pengukuran oleh juru ukur berlisensi.</string>
+
+    <!-- Tindakan umum -->
+    <string name="action_save">Simpan</string>
+    <string name="action_cancel">Batal</string>
+    <string name="action_delete">Hapus</string>
+    <string name="action_back">Kembali</string>
+    <string name="action_edit">Ubah</string>
+    <string name="action_share">Bagikan</string>
+    <string name="action_search">Cari</string>
+    <string name="action_sort">Urutkan</string>
+    <string name="action_map">Peta</string>
+    <string name="action_settings">Pengaturan</string>
+    <string name="action_navigate">Navigasi</string>
+    <string name="action_compass">Kompas</string>
+    <string name="action_export_pdf">Ekspor PDF</string>
+    <string name="action_more">Lainnya</string>
+    <string name="action_undo">Urungkan</string>
+
+    <!-- Navigasi bawah -->
+    <string name="nav_lands">Tanah</string>
+    <string name="nav_map">Peta</string>
+    <string name="nav_settings">Pengaturan</string>
+
+    <!-- Daftar tanah -->
+    <string name="list_search_placeholder">Cari nama, catatan, alamat</string>
+    <string name="list_fab_save_land">Simpan tanah</string>
+    <string name="list_empty_title">Belum ada tanah tersimpan</string>
+    <string name="list_empty_body">Tekan Simpan tanah untuk merekam koordinat GPS pertama Anda.</string>
+    <string name="list_no_matches_title">Tidak ditemukan</string>
+    <string name="list_no_matches_body">Coba kata pencarian lain.</string>
+    <string name="card_navigate_to">Navigasi ke %1$s</string>
+    <string name="list_search_clear">Bersihkan pencarian</string>
+    <!-- Ringkasan di atas daftar: berapa bidang yang tampil, lalu total luasnya -->
+    <plurals name="list_summary">
+        <item quantity="other">%1$d bidang</item>
+    </plurals>
+    <string name="list_summary_total_area">total %1$s</string>
+    <string name="label_shape_point">Satu titik</string>
+    <string name="label_shape_polygon">Batas terukur</string>
+    <string name="msg_delete_undone">Penghapusan diurungkan</string>
+
+    <string name="sort_date_desc">Terbaru dulu</string>
+    <string name="sort_date_asc">Terlama dulu</string>
+    <string name="sort_name_asc">Nama A–Z</string>
+    <string name="sort_name_desc">Nama Z–A</string>
+    <string name="sort_distance">Terdekat dulu</string>
+    <string name="sort_area_desc">Luas terbesar dulu</string>
+    <string name="sort_area_asc">Luas terkecil dulu</string>
+
+    <!-- Memilih beberapa tanah sekaligus -->
+    <string name="action_select">Pilih</string>
+    <string name="action_select_all">Pilih semua yang tampil</string>
+    <string name="action_clear_selection">Batalkan pilihan</string>
+    <string name="action_export_selected">Ekspor yang dipilih</string>
+    <string name="action_delete_selected">Hapus yang dipilih</string>
+    <plurals name="selection_count">
+        <item quantity="other">%1$d dipilih</item>
+    </plurals>
+    <plurals name="msg_deleted">
+        <item quantity="other">%1$d lokasi dihapus</item>
+    </plurals>
+    <plurals name="delete_selected_dialog_title">
+        <item quantity="other">Hapus %1$d lokasi?</item>
+    </plurals>
+    <string name="delete_selected_dialog_body">Lokasi-lokasi ini beserta fotonya akan dihapus dari perangkat dan tidak dapat dikembalikan.</string>
+    <string name="export_selected_dialog_title">Ekspor pilihan sebagai</string>
+
+    <!-- Izin lokasi -->
+    <string name="permission_title">Izin lokasi diperlukan</string>
+    <string name="permission_body">LandPoint memerlukan akses lokasi untuk mengambil koordinat GPS. Tidak ada data yang keluar dari perangkat Anda.</string>
+    <string name="permission_grant">Beri izin</string>
+
+    <!-- Editor -->
+    <string name="edit_title_new">Simpan tanah</string>
+    <string name="edit_title_edit">Ubah tanah</string>
+    <string name="edit_section_details">Rincian tanah</string>
+    <string name="edit_section_notes">Deskripsi dan catatan</string>
+    <string name="field_name">Nama *</string>
+    <string name="field_name_hint">mis. Sawah sebelah utara</string>
+    <string name="field_latitude">Lintang *</string>
+    <string name="field_longitude">Bujur *</string>
+    <string name="field_parcel_number">Nomor persil</string>
+    <string name="field_description">Deskripsi</string>
+    <string name="field_notes">Catatan</string>
+    <string name="edit_find_address">Cari alamat</string>
+    <string name="edit_looking_up">Mencari…</string>
+    <string name="edit_use_my_location">Pakai lokasi saya</string>
+    <string name="edit_getting_fix">Mengambil sinyal…</string>
+    <string name="edit_accuracy">Akurasi ±%1$d m</string>
+    <string name="edit_altitude">Ketinggian %1$d m</string>
+    <string name="edit_averaging">Merata-ratakan… tahan jangan bergerak</string>
+    <string name="edit_quality_excellent">Sangat baik</string>
+    <string name="edit_quality_good">Baik</string>
+    <string name="edit_quality_fair">Cukup</string>
+    <string name="edit_quality_poor">Kurang</string>
+    <string name="edit_network_only">Hanya menara seluler / Wi-Fi — keluar ke area terbuka agar lebih akurat</string>
+    <plurals name="edit_rejected">
+        <item quantity="other">%1$d bacaan menyimpang dibuang</item>
+    </plurals>
+    <plurals name="edit_samples">
+        <item quantity="other">%1$d bacaan</item>
+    </plurals>
+
+    <!-- Batas bidang -->
+    <string name="boundary_title">Batas bidang</string>
+    <string name="boundary_hint">Berdiri di setiap sudut lalu ketuk Tambah sudut. Tiga sudut atau lebih menghasilkan luas.</string>
+    <string name="boundary_add">Tambah sudut</string>
+    <string name="boundary_capturing">Mengukur sudut…</string>
+    <string name="boundary_undo">Batalkan</string>
+    <string name="boundary_clear">Hapus semua</string>
+    <string name="boundary_area">Luas</string>
+    <string name="boundary_perimeter">Keliling %1$s m</string>
+    <plurals name="boundary_need_more">
+        <item quantity="other">Tambah %1$d sudut lagi untuk menutup bidang</item>
+    </plurals>
+    <plurals name="boundary_corners">
+        <item quantity="other">%1$d sudut</item>
+    </plurals>
+    <string name="msg_corner_too_close">Titik ini sama dengan sudut sebelumnya</string>
+
+    <!-- Pemilih sudut di peta -->
+    <string name="boundary_pick_on_map">Pilih di peta</string>
+    <string name="boundary_pin_centroid">Titik pin lahan: %1$s</string>
+    <string name="corner_picker_title">Tandai sudut-sudut</string>
+    <string name="corner_picker_tap_hint">Ketuk peta untuk menandai sudut. Geser sudut untuk memindahkannya.</string>
+    <string name="corner_picker_no_map">Peta offline belum diimpor, jadi latar kosong. Sudut, luas, dan posisi Anda tetap berfungsi.</string>
+    <string name="corner_picker_use_gps">Pakai posisi saya</string>
+    <string name="corner_picker_done">Pakai batas ini</string>
+    <string name="corner_picker_cancel">Batal</string>
+
+    <!-- Ukur sambil berjalan -->
+    <string name="boundary_walk_start">Ukur sambil berjalan</string>
+    <string name="boundary_walk_stop">Selesai berjalan</string>
+    <string name="boundary_walk_hint">Untuk batas yang terlalu panjang atau terlalu rimbun untuk didatangi tiap sudutnya. Berjalanlah menyusuri seluruh tepi lalu kembali ke titik awal. Cara sudut-per-sudut tetap lebih akurat.</string>
+    <string name="boundary_walk_recording">Merekam · %1$s berjalan</string>
+    <string name="msg_walk_started">Susuri batas bidang, lalu ketuk Selesai berjalan setibanya kembali di titik awal</string>
+    <string name="msg_walk_too_short">Jalur tidak terekam — titik GPS yang layak terlalu sedikit. Coba lagi di ruang terbuka, atau pakai Tambah sudut.</string>
+    <plurals name="msg_walk_done">
+        <item quantity="other">Selesai berjalan · %1$d sudut</item>
+    </plurals>
+    <string name="msg_location_permission_needed">Izin lokasi diperlukan untuk ini</string>
+
+    <string name="photos_title">Foto</string>
+    <string name="photo_camera">Kamera</string>
+    <string name="photo_gallery">Galeri</string>
+    <string name="photo_remove">Hapus foto</string>
+    <string name="photo_description">Foto tanah</string>
+    <string name="photo_caption">Keterangan</string>
+    <string name="photo_caption_hint">mis. patok batas di sisi utara</string>
+    <string name="photo_caption_edit">Beri keterangan foto ini</string>
+
+    <string name="error_name_required">Beri nama untuk tanah ini</string>
+    <string name="error_coordinates_required">Ambil atau masukkan koordinat</string>
+    <string name="error_latitude_range">Lintang harus antara -90 dan 90</string>
+    <string name="error_longitude_range">Bujur harus antara -180 dan 180</string>
+
+    <string name="msg_location_off">Lokasi sedang mati. Nyalakan GPS lalu coba lagi.</string>
+    <string name="msg_no_fix">Belum dapat sinyal GPS. Coba lagi di ruang terbuka.</string>
+    <string name="msg_no_address">Alamat untuk titik ini tidak ditemukan</string>
+    <string name="msg_photo_save_failed">Foto gagal disimpan</string>
+    <string name="msg_photo_import_failed">Foto gagal dimuat</string>
+    <string name="msg_no_camera_app">Tidak ada aplikasi kamera di perangkat ini</string>
+    <string name="msg_no_browser_app">Tidak ada peramban untuk membuka tautan itu</string>
+
+    <!-- Rincian -->
+    <string name="detail_title_fallback">Tanah</string>
+    <string name="detail_missing">Tanah ini sudah tidak ada.</string>
+    <string name="detail_distance_away">%1$s dari sini</string>
+    <string name="delete_dialog_title">Hapus %1$s?</string>
+    <string name="delete_dialog_body">Lokasi ini beserta fotonya akan dihapus dari perangkat dan tidak dapat dikembalikan.</string>
+
+    <string name="label_coordinates">Koordinat</string>
+    <string name="label_description">Deskripsi</string>
+    <string name="label_notes">Catatan</string>
+    <string name="label_parcel_number">Nomor persil</string>
+    <string name="label_address">Alamat</string>
+    <string name="label_altitude">Ketinggian</string>
+    <string name="label_gps_accuracy">Akurasi GPS</string>
+    <string name="label_area">Luas</string>
+    <string name="label_perimeter">Keliling</string>
+    <string name="label_saved">Disimpan</string>
+    <string name="label_last_edited">Terakhir diubah</string>
+
+    <string name="value_metres">%1$d m</string>
+    <string name="value_accuracy">±%1$d m</string>
+
+    <string name="msg_pdf_saved">PDF tersimpan</string>
+
+    <!-- Kompas -->
+    <string name="compass_title">Kompas</string>
+    <string name="compass_waiting">Menunggu sinyal GPS…</string>
+    <string name="compass_no_sensor">Perangkat ini tidak punya sensor kompas — panah menunjukkan arah sebenarnya dari posisi Anda, tidak ikut berputar bersama ponsel.</string>
+
+    <string-array name="cardinal_directions">
+        <item>U</item>
+        <item>TL</item>
+        <item>T</item>
+        <item>TG</item>
+        <item>S</item>
+        <item>BD</item>
+        <item>B</item>
+        <item>BL</item>
+    </string-array>
+
+    <!-- Peta -->
+    <string name="map_title">Peta</string>
+    <string name="map_my_location">Lokasi saya</string>
+    <string name="map_you_are_here">Anda di sini</string>
+
+    <!-- Pengaturan -->
+    <string name="settings_title">Pengaturan</string>
+    <string name="settings_section_language">Bahasa</string>
+    <string name="settings_section_appearance">Tampilan</string>
+    <string name="settings_dynamic_color">Ikut warna wallpaper</string>
+    <string name="settings_dynamic_color_hint">Warna diambil dari wallpaper Anda, bukan hijau LandPoint. Android 12 dan yang lebih baru.</string>
+    <string name="settings_section_coordinate_format">Format koordinat</string>
+    <string name="settings_section_units">Satuan jarak</string>
+    <string name="settings_section_backup">Pencadangan dan ekspor</string>
+    <string name="settings_section_restore">Pemulihan dan impor</string>
+    <string name="settings_section_about">Tentang</string>
+
+    <plurals name="settings_stored_count">
+        <item quantity="other">%1$d lokasi tersimpan di perangkat ini.</item>
+    </plurals>
+
+    <string name="settings_backup_archive">Cadangan lengkap (dengan foto)</string>
+    <string name="settings_backup_archive_hint">Satu berkas berisi semua lokasi, batas, dan foto. Simpan di tempat lain — HP lain, kartu memori, atau penyimpanan awan milik Anda sendiri — supaya HP yang hilang atau di-reset tidak ikut membawa catatan Anda.</string>
+    <string name="settings_backup_json">Cadangkan ke JSON</string>
+    <string name="settings_export_csv">Ekspor CSV</string>
+    <string name="settings_export_pdf">Ekspor laporan PDF</string>
+    <string name="settings_export_gpx">Ekspor GPX (aplikasi GPS)</string>
+    <string name="settings_export_kml">Ekspor KML (Google Earth)</string>
+    <string name="settings_section_offline">Peta luring</string>
+    <string name="settings_offline_explainer">Area peta yang pernah Anda buka tersimpan di perangkat ini dan tetap bisa dipakai tanpa sinyal. Untuk cakupan satu provinsi tanpa jaringan sama sekali, tambahkan berkas peta vektor (.map) — digambar langsung di HP Anda, jadi tidak memakai kuota. Arsip tile siap pakai (.mbtiles, .gemf, .zip) juga bisa.</string>
+    <string name="settings_offline_add">Tambah berkas peta luring</string>
+    <string name="settings_offline_get">Unduh peta gratis (OpenAndroMaps)</string>
+    <string name="settings_offline_get_hint">Peta vektor gratis per wilayah, dibuat dari data OpenStreetMap. Unduh berkas .map untuk daerah Anda lewat peramban, lalu tambahkan di sini.</string>
+    <string name="settings_offline_kind_vector">Peta vektor, digambar di perangkat ini</string>
+    <string name="settings_offline_kind_raster">Arsip tile</string>
+    <string name="map_attribution_osm">© Kontributor OpenStreetMap</string>
+    <string name="settings_offline_cached">Petak peta tersimpan: %1$s</string>
+    <string name="settings_offline_none">Belum ada berkas peta</string>
+    <string name="action_remove">Hapus</string>
+    <string name="settings_restore_archive">Pulihkan cadangan lengkap</string>
+    <string name="settings_restore_json">Pulihkan dari JSON</string>
+    <string name="settings_import_csv">Impor CSV</string>
+    <string name="settings_duplicate_prompt">Bila lokasi yang diimpor sudah ada:</string>
+    <string name="settings_about_privacy">Semua data tetap di perangkat ini. Tanpa akun, tanpa pelacakan, tanpa unggahan. Peta berasal dari OpenStreetMap dan disimpan sementara agar bisa dipakai luring setelah dibuka sekali.</string>
+    <string name="settings_version">LandPoint %1$s</string>
+
+    <string name="language_system">Ikuti sistem</string>
+    <string name="language_english">English</string>
+    <string name="language_indonesian">Bahasa Indonesia</string>
+
+    <string name="dark_mode_system">Ikuti sistem</string>
+    <string name="dark_mode_light">Terang</string>
+    <string name="dark_mode_dark">Gelap</string>
+
+    <string name="units_metric">Metrik (m, km)</string>
+    <string name="units_imperial">Imperial (kaki, mil)</string>
+
+    <string name="coord_format_decimal">Derajat desimal (-6.914744, 107.609810)</string>
+    <string name="coord_format_dms">Derajat, menit, detik (6°54\'53\"S)</string>
+
+    <string name="settings_section_area_unit">Satuan luas</string>
+    <string name="area_unit_sqm">Meter persegi (m²)</string>
+    <string name="area_unit_are">Are (1 are = 100 m²)</string>
+    <string name="area_unit_hectare">Hektare (ha)</string>
+    <string name="area_unit_tumbak">Tumbak / bata (1 tumbak = 14 m²)</string>
+    <string name="area_unit_ubin">Ubin / ru (1 ubin = 14,0625 m²)</string>
+    <string name="area_unit_rante">Rante (1 rante = 400 m²)</string>
+    <string name="area_unit_bahu">Bahu (1 bahu = 7.096,5 m²)</string>
+    <string name="area_unit_acre">Acre (1 acre = 4.046,86 m²)</string>
+    <string name="value_area_sqm">%1$s m²</string>
+    <string name="value_area_are">%1$s are</string>
+    <string name="value_area_hectare">%1$s ha</string>
+    <string name="value_area_tumbak">%1$s tumbak</string>
+    <string name="value_area_ubin">%1$s ubin</string>
+    <string name="value_area_rante">%1$s rante</string>
+    <string name="value_area_bahu">%1$s bahu</string>
+    <string name="value_area_acre">%1$s ac</string>
+
+    <string name="duplicate_skip">Lewati — pakai yang sudah ada</string>
+    <string name="duplicate_replace">Ganti dengan hasil impor</string>
+    <string name="duplicate_keep_both">Simpan keduanya sebagai lokasi terpisah</string>
+
+    <!-- Hasil impor / ekspor -->
+    <string name="msg_backup_failed">Pencadangan gagal: %1$s</string>
+    <plurals name="msg_backed_up">
+        <item quantity="other">%1$d lokasi dicadangkan</item>
+    </plurals>
+    <string name="msg_csv_failed">Ekspor CSV gagal: %1$s</string>
+    <string name="msg_backup_archive_done">Cadangan tersimpan: %1$d lokasi, %2$d foto</string>
+    <string name="msg_backup_archive_partial">Cadangan tersimpan: %1$d lokasi, %2$d foto. %3$d berkas foto tidak ditemukan sehingga tidak ikut disertakan.</string>
+    <string name="msg_restore_failed">Pemulihan gagal: %1$s</string>
+    <plurals name="msg_restore_photos">
+        <item quantity="other">, %1$d foto dipulihkan</item>
+    </plurals>
+    <plurals name="msg_exported">
+        <item quantity="other">%1$d lokasi diekspor</item>
+    </plurals>
+    <string name="msg_pdf_failed">Ekspor PDF gagal: %1$s</string>
+    <string name="msg_geo_export_failed">Ekspor peta gagal: %1$s</string>
+    <string name="msg_offline_map_added">Peta luring ditambahkan: %1$s</string>
+    <string name="msg_offline_map_removed">Peta luring dihapus: %1$s</string>
+    <string name="msg_offline_map_unsupported">Jenis berkas peta tidak didukung: .%1$s</string>
+    <string name="msg_offline_map_failed">Tidak bisa menambah peta luring: %1$s</string>
+    <string name="msg_pdf_generic">Ekspor PDF gagal</string>
+    <plurals name="msg_report_saved">
+        <item quantity="other">Laporan tersimpan (%1$d lokasi)</item>
+    </plurals>
+    <string name="msg_import_failed">Impor gagal: %1$s</string>
+    <string name="msg_import_imported">%1$d diimpor</string>
+    <string name="msg_import_replaced">, %1$d diganti</string>
+    <plurals name="msg_import_skipped">
+        <item quantity="other">, %1$d duplikat dilewati</item>
+    </plurals>
+    <plurals name="msg_import_invalid">
+        <item quantity="other">, %1$d baris tidak valid diabaikan</item>
+    </plurals>
+    <string name="msg_generic_error">Terjadi kesalahan: %1$s</string>
+
+    <!-- Berbagi -->
+    <string name="share_parcel">Persil: %1$s</string>
+    <string name="share_altitude">Ketinggian: %1$d m</string>
+    <string name="share_accuracy">Akurasi: ±%1$d m</string>
+    <string name="toast_no_maps_app">Tidak ada aplikasi peta terpasang</string>
+    <string name="toast_no_file_handler">Tidak ada aplikasi yang bisa membuka berkas ini</string>
+    <string name="toast_no_share_app">Tidak ada aplikasi untuk berbagi</string>
+
+    <!-- Laporan PDF -->
+    <string name="pdf_title_single">Catatan Lokasi Tanah</string>
+    <string name="pdf_title_report">Laporan Lokasi Tanah</string>
+    <string name="pdf_exported_on">Diekspor %1$s</string>
+    <string name="pdf_count_exported">%1$d lokasi · diekspor %2$s</string>
+    <string name="pdf_footer_page">Dibuat oleh LandPoint · halaman %1$d</string>
+    <string name="pdf_footer_disclaimer">Hanya untuk catatan pribadi — bukan dokumen pengukuran resmi.</string>
+
+</resources>

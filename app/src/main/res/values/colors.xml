@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+      The window background only, not the app palette — Compose owns everything
+      after the first frame. These two values exist so the window that Android
+      draws *before* Compose starts already matches the theme it is about to
+      show. They mirror Neutral98 and Neutral6 in ui/theme/Color.kt; if those
+      change, change these with them.
+    -->
+    <color name="window_background">#FFFAFDF8</color>
+    <color name="window_background_dark">#FF0F1511</color>
+
+</resources>
