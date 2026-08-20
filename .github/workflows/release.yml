@@ -35,13 +35,7 @@ jobs:
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > landpoint-release.jks
-            cat > keystore.properties <<EOF
-            storeFile=landpoint-release.jks
-            storePassword=$KEYSTORE_PASSWORD
-            keyAlias=$KEY_ALIAS
-            keyPassword=$KEY_PASSWORD
-            EOF
-            sed -i 's/^[[:space:]]*//' keystore.properties
+            printf 'storeFile=landpoint-release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > keystore.properties
             echo "Signing keystore restored from secrets."
           else
             echo "No KEYSTORE_BASE64 secret; release will be UNSIGNED."
