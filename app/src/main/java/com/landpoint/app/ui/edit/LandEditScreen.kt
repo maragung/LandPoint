@@ -79,7 +79,6 @@ import com.landpoint.app.R
 import com.landpoint.app.data.SettingsRepository
 import com.landpoint.app.location.FixQuality
 import com.landpoint.app.util.AreaFormat
-import com.landpoint.app.util.BoundaryEdits
 import com.landpoint.app.util.GeoPoint
 import com.landpoint.app.util.GeoUtils
 import java.io.File
@@ -480,8 +479,8 @@ private fun BoundarySection(
     onClear: () -> Unit,
     onStartWalk: () -> Unit,
     onStopWalk: () -> Unit,
-    onAddManual: (String, String) -> Boolean,
-    onUpdateCorner: (Int, String, String) -> Boolean,
+    onAddManual: (String, String) -> Int?,
+    onUpdateCorner: (Int, String, String) -> Int?,
     onRemoveCorner: (Int) -> Unit,
     onMoveCornerUp: (Int) -> Unit,
     onMoveCornerDown: (Int) -> Unit
@@ -642,11 +641,11 @@ private fun BoundarySection(
             initial = index?.let { state.boundary.getOrNull(it) },
             onDismiss = { dialogOpen = false },
             onConfirm = { lat, lon ->
-                val accepted =
+                val refusal =
                     if (index == null) onAddManual(lat, lon)
                     else onUpdateCorner(index, lat, lon)
-                if (accepted) dialogOpen = false
-                accepted
+                if (refusal == null) dialogOpen = false
+                refusal
             }
         )
     }
@@ -755,17 +754,16 @@ private fun CornerAction(
 /**
  * Types one corner in, or corrects one already recorded.
  *
- * [onConfirm] returns false when the view model refuses the values, and the
- * dialog stays open with the text still in it — retyping both coordinates
- * because one digit was wrong is exactly the kind of thing that makes people
- * give up on entering a boundary at all.
+ * [onConfirm] returns null once the corner is accepted, or the string resource
+ * explaining the refusal — which is shown here rather than as a snackbar this
+ * dialog would sit on top of, with the typed text left where it is.
  */
 @Composable
 private fun CornerCoordinateDialog(
     number: Int?,
     initial: GeoPoint?,
     onDismiss: () -> Unit,
-    onConfirm: (String, String) -> Boolean
+    onConfirm: (String, String) -> Int?
 ) {
     var latitude by remember(initial) {
         mutableStateOf(initial?.latitude?.toString() ?: "")
@@ -819,16 +817,9 @@ private fun CornerCoordinateDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                error = when {
-                    BoundaryEdits.parseLatLon(latitude, longitude) == null ->
-                        R.string.error_corner_invalid
-                    // The only other refusal the view model has is a corner
-                    // already standing on that spot.
-                    !onConfirm(latitude, longitude) -> R.string.error_corner_duplicate
-                    else -> null
-                }
-            }) { Text(stringResource(R.string.action_save)) }
+            TextButton(onClick = { error = onConfirm(latitude, longitude) }) {
+                Text(stringResource(R.string.action_save))
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }

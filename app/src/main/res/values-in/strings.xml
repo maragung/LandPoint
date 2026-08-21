@@ -153,6 +153,7 @@
     <string name="corner_dialog_hint">Derajat desimal, seperti tertulis di surat ukur — misalnya -6.914744 dan 107.609810.</string>
     <string name="error_corner_invalid">Isi kedua koordinat dalam derajat desimal, pakai tanda titik</string>
     <string name="error_corner_duplicate">Sudah ada sudut yang tercatat di titik itu</string>
+    <string name="error_corner_busy">Selesaikan dulu rekaman jalan atau tangkapan GPS</string>
     <string name="corner_picker_select_hint">Ketuk sebuah sudut untuk memilihnya.</string>
     <string name="corner_picker_delete_selected">Hapus sudut %1$d</string>
     <string name="corner_picker_deselect">Batalkan pilihan</string>

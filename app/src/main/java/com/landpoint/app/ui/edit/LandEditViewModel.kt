@@ -490,40 +490,39 @@ class LandEditViewModel(
     // underneath, and an edit interleaved with them would be lost or fight them.
 
     /**
-     * Adds a typed corner. Returns false when the input cannot be used, so the
-     * dialog can stay open with what the user typed still in it.
+     * Adds a typed corner, or returns the reason it could not be added.
+     *
+     * Null means it went in. Anything else is a string resource for the caller to
+     * show *inside its own dialog*, beside the fields, rather than as a snackbar
+     * the dialog covers — and the dialog keeps the typed text, because retyping
+     * both coordinates over one wrong digit is how people give up on entering a
+     * boundary at all.
      */
-    fun addBoundaryPointManual(latitude: String, longitude: String): Boolean {
-        if (boundaryEditsBlocked()) return false
-        val point = BoundaryEdits.parseLatLon(latitude, longitude) ?: run {
-            _uiState.update { it.copy(message = strings.get(R.string.error_corner_invalid)) }
-            return false
-        }
+    @StringRes
+    fun addBoundaryPointManual(latitude: String, longitude: String): Int? {
+        if (boundaryEditsBlocked()) return R.string.error_corner_busy
+        val point = BoundaryEdits.parseLatLon(latitude, longitude)
+            ?: return R.string.error_corner_invalid
         if (!BoundaryEdits.isDistinct(_uiState.value.boundary, point)) {
-            _uiState.update { it.copy(message = strings.get(R.string.error_corner_duplicate)) }
-            return false
+            return R.string.error_corner_duplicate
         }
-        _uiState.update { it.copy(boundary = it.boundary + point, message = null) }
-        return true
+        _uiState.update { it.copy(boundary = it.boundary + point) }
+        return null
     }
 
     /** Retypes one corner in place, keeping its position in the ring. */
-    fun updateBoundaryPoint(index: Int, latitude: String, longitude: String): Boolean {
-        if (boundaryEditsBlocked()) return false
-        val point = BoundaryEdits.parseLatLon(latitude, longitude) ?: run {
-            _uiState.update { it.copy(message = strings.get(R.string.error_corner_invalid)) }
-            return false
-        }
+    @StringRes
+    fun updateBoundaryPoint(index: Int, latitude: String, longitude: String): Int? {
+        if (boundaryEditsBlocked()) return R.string.error_corner_busy
+        val point = BoundaryEdits.parseLatLon(latitude, longitude)
+            ?: return R.string.error_corner_invalid
         // The corner being edited is excluded from the duplicate check, or
         // correcting a typo in the longitude alone would be refused by itself.
         if (!BoundaryEdits.isDistinct(_uiState.value.boundary, point, ignoreIndex = index)) {
-            _uiState.update { it.copy(message = strings.get(R.string.error_corner_duplicate)) }
-            return false
+            return R.string.error_corner_duplicate
         }
-        _uiState.update {
-            it.copy(boundary = BoundaryEdits.replaceAt(it.boundary, index, point), message = null)
-        }
-        return true
+        _uiState.update { it.copy(boundary = BoundaryEdits.replaceAt(it.boundary, index, point)) }
+        return null
     }
 
     fun removeBoundaryPoint(index: Int) {

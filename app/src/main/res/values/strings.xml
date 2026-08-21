@@ -161,6 +161,7 @@
     <string name="corner_dialog_hint">Decimal degrees, as printed on a survey letter — for example -6.914744 and 107.609810.</string>
     <string name="error_corner_invalid">Enter both coordinates as decimal degrees, using a dot</string>
     <string name="error_corner_duplicate">A corner is already recorded on that spot</string>
+    <string name="error_corner_busy">Finish the walk or the GPS capture first</string>
     <string name="corner_picker_select_hint">Tap a corner to select it.</string>
     <string name="corner_picker_delete_selected">Delete corner %1$d</string>
     <string name="corner_picker_deselect">Clear selection</string>
