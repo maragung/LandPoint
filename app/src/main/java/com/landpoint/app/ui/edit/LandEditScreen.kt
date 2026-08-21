@@ -25,8 +25,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.AddLocationAlt
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.EditLocationAlt
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.PhotoCamera
@@ -74,6 +79,8 @@ import com.landpoint.app.R
 import com.landpoint.app.data.SettingsRepository
 import com.landpoint.app.location.FixQuality
 import com.landpoint.app.util.AreaFormat
+import com.landpoint.app.util.BoundaryEdits
+import com.landpoint.app.util.GeoPoint
 import com.landpoint.app.util.GeoUtils
 import java.io.File
 import kotlin.math.roundToInt
@@ -125,6 +132,8 @@ fun LandEditScreen(
             currentLocation = currentLocation,
             onTapCorner = viewModel::addDraftCornerAt,
             onMoveCorner = viewModel::moveDraftCorner,
+            onSelectCorner = viewModel::selectDraftCorner,
+            onDeleteSelected = viewModel::removeSelectedDraftCorner,
             onUseGps = viewModel::captureDraftCornerFromGps,
             onUndo = viewModel::undoDraftCorner,
             onClear = viewModel::clearDraftCorners,
@@ -218,7 +227,12 @@ fun LandEditScreen(
                     onUndo = viewModel::undoBoundaryPoint,
                     onClear = viewModel::clearBoundary,
                     onStartWalk = viewModel::startWalk,
-                    onStopWalk = viewModel::stopWalk
+                    onStopWalk = viewModel::stopWalk,
+                    onAddManual = viewModel::addBoundaryPointManual,
+                    onUpdateCorner = viewModel::updateBoundaryPoint,
+                    onRemoveCorner = viewModel::removeBoundaryPoint,
+                    onMoveCornerUp = viewModel::moveBoundaryPointUp,
+                    onMoveCornerDown = viewModel::moveBoundaryPointDown
                 )
             }
 
@@ -465,12 +479,21 @@ private fun BoundarySection(
     onUndo: () -> Unit,
     onClear: () -> Unit,
     onStartWalk: () -> Unit,
-    onStopWalk: () -> Unit
+    onStopWalk: () -> Unit,
+    onAddManual: (String, String) -> Boolean,
+    onUpdateCorner: (Int, String, String) -> Boolean,
+    onRemoveCorner: (Int) -> Unit,
+    onMoveCornerUp: (Int) -> Unit,
+    onMoveCornerDown: (Int) -> Unit
 ) {
     val areaUnit = state.areaUnit
     // While a walk records, every other boundary control edits a shape that is
     // being rewritten underneath it. Freeze them rather than race the track.
     val busy = state.isCapturingCorner || state.isWalking
+
+    // Null index means the dialog is adding rather than correcting.
+    var dialogOpen by remember { mutableStateOf(false) }
+    var editIndex by remember { mutableStateOf<Int?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.boundary_title), style = MaterialTheme.typography.titleSmall)
@@ -527,6 +550,27 @@ private fun BoundarySection(
             )
         }
 
+        // The path that needs no GPS and no map at all: corners copied off a
+        // survey letter or a certificate, which is how most of these boundaries
+        // are already written down.
+        OutlinedButton(
+            onClick = {
+                editIndex = null
+                dialogOpen = true
+            },
+            enabled = !busy
+        ) {
+            Icon(
+                Icons.Outlined.EditLocationAlt,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                "  " + stringResource(R.string.boundary_add_manual),
+                style = MaterialTheme.typography.labelLarge
+            )
+        }
+
         WalkControls(state = state, onStartWalk = onStartWalk, onStopWalk = onStopWalk)
 
         if (state.boundary.isNotEmpty()) {
@@ -539,6 +583,18 @@ private fun BoundarySection(
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            CornerList(
+                boundary = state.boundary,
+                enabled = !busy,
+                onEdit = { index ->
+                    editIndex = index
+                    dialogOpen = true
+                },
+                onRemove = onRemoveCorner,
+                onMoveUp = onMoveCornerUp,
+                onMoveDown = onMoveCornerDown
             )
         }
 
@@ -578,6 +634,206 @@ private fun BoundarySection(
             )
         }
     }
+
+    if (dialogOpen) {
+        val index = editIndex
+        CornerCoordinateDialog(
+            number = index?.plus(1),
+            initial = index?.let { state.boundary.getOrNull(it) },
+            onDismiss = { dialogOpen = false },
+            onConfirm = { lat, lon ->
+                val accepted =
+                    if (index == null) onAddManual(lat, lon)
+                    else onUpdateCorner(index, lat, lon)
+                if (accepted) dialogOpen = false
+                accepted
+            }
+        )
+    }
+}
+
+/**
+ * The corners in the order they are joined up, each one editable.
+ *
+ * The numbers are not decoration: the order *is* the outline, so a boundary that
+ * draws a bow tie is fixed by moving one corner up or down, and there is no way
+ * to see that without seeing the sequence. Undo only ever reaches the last
+ * corner placed, which is no help when the wrong one is in the middle.
+ *
+ * A walked boundary can hold hundreds of points, so the list stays short until
+ * asked — and reordering a walked track is not a thing anyone needs to do.
+ */
+@Composable
+private fun CornerList(
+    boundary: List<GeoPoint>,
+    enabled: Boolean,
+    onEdit: (Int) -> Unit,
+    onRemove: (Int) -> Unit,
+    onMoveUp: (Int) -> Unit,
+    onMoveDown: (Int) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val collapsedCount = 10
+    val shown = if (expanded) boundary.size else minOf(boundary.size, collapsedCount)
+
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (boundary.size >= 3) {
+            Text(
+                stringResource(R.string.boundary_order_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        for (index in 0 until shown) {
+            val point = boundary[index]
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    stringResource(
+                        R.string.boundary_corner_number,
+                        index + 1,
+                        GeoUtils.formatDecimal(point.latitude, point.longitude)
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.weight(1f)
+                )
+                CornerAction(
+                    icon = Icons.Default.ArrowUpward,
+                    description = stringResource(R.string.boundary_corner_up, index + 1),
+                    enabled = enabled && index > 0,
+                    onClick = { onMoveUp(index) }
+                )
+                CornerAction(
+                    icon = Icons.Default.ArrowDownward,
+                    description = stringResource(R.string.boundary_corner_down, index + 1),
+                    enabled = enabled && index < boundary.size - 1,
+                    onClick = { onMoveDown(index) }
+                )
+                CornerAction(
+                    icon = Icons.Outlined.Edit,
+                    description = stringResource(R.string.boundary_corner_edit, index + 1),
+                    enabled = enabled,
+                    onClick = { onEdit(index) }
+                )
+                CornerAction(
+                    icon = Icons.Outlined.Delete,
+                    description = stringResource(R.string.boundary_corner_delete, index + 1),
+                    enabled = enabled,
+                    onClick = { onRemove(index) }
+                )
+            }
+        }
+
+        if (boundary.size > collapsedCount) {
+            TextButton(onClick = { expanded = !expanded }) {
+                Text(
+                    if (expanded) stringResource(R.string.boundary_corners_collapse)
+                    else stringResource(R.string.boundary_corners_show_all, boundary.size)
+                )
+            }
+        }
+    }
+}
+
+/** Four of these fit beside a coordinate only at this size. */
+@Composable
+private fun CornerAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(36.dp)) {
+        Icon(icon, contentDescription = description, modifier = Modifier.size(18.dp))
+    }
+}
+
+/**
+ * Types one corner in, or corrects one already recorded.
+ *
+ * [onConfirm] returns false when the view model refuses the values, and the
+ * dialog stays open with the text still in it — retyping both coordinates
+ * because one digit was wrong is exactly the kind of thing that makes people
+ * give up on entering a boundary at all.
+ */
+@Composable
+private fun CornerCoordinateDialog(
+    number: Int?,
+    initial: GeoPoint?,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Boolean
+) {
+    var latitude by remember(initial) {
+        mutableStateOf(initial?.latitude?.toString() ?: "")
+    }
+    var longitude by remember(initial) {
+        mutableStateOf(initial?.longitude?.toString() ?: "")
+    }
+    var error by remember { mutableStateOf<Int?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (number == null) stringResource(R.string.corner_dialog_title_add)
+                else stringResource(R.string.corner_dialog_title_edit, number)
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = latitude,
+                    onValueChange = { latitude = it; error = null },
+                    label = { Text(stringResource(R.string.corner_dialog_lat)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = longitude,
+                    onValueChange = { longitude = it; error = null },
+                    label = { Text(stringResource(R.string.corner_dialog_lon)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Done
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    stringResource(R.string.corner_dialog_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                error?.let {
+                    Text(
+                        stringResource(it),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                error = when {
+                    BoundaryEdits.parseLatLon(latitude, longitude) == null ->
+                        R.string.error_corner_invalid
+                    // The only other refusal the view model has is a corner
+                    // already standing on that spot.
+                    !onConfirm(latitude, longitude) -> R.string.error_corner_duplicate
+                    else -> null
+                }
+            }) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        }
+    )
 }
 
 /**

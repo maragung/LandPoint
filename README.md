@@ -35,9 +35,18 @@ or gallery.
 **Manage** — save each spot with a name, description and notes. Search, sort by
 name, date or distance, and see how far each one is from where you are standing.
 
-**Map** — every saved location as a marker on an OpenStreetMap view. Tap a marker
-to open the record. Tiles you have already viewed stay cached, so a map you
-loaded at home still works in a field with no signal.
+**Measure** — a plot is more than one point, so record its corners and get the
+shape. Stand on each corner and let the GPS average a fix, tap them out on the
+map, walk the boundary and let it record as you go, or type coordinates straight
+off a survey letter. Corners can be reordered, corrected and deleted one at a
+time — the order is the outline — and once three are in, the area and perimeter
+are worked out and the plot's pin moves to its centroid.
+
+**Map** — every saved location as a marker on an OpenStreetMap view, with mapped
+plots drawn as filled shapes. Tap a marker or a plot to open the record; open a
+record's boundary full screen to see its numbered corners, area and perimeter.
+Tiles you have already viewed stay cached, so a map you loaded at home still
+works in a field with no signal.
 
 **Navigate** — hand off to Google Maps (or any installed maps app), or use the
 built-in compass mode: an arrow that points at the plot with live distance and
@@ -151,9 +160,10 @@ Deliberate choices worth knowing:
   cost more in build time and APK size than it returns.
 - **Storage Access Framework for every file** — the reason the app never asks for
   a storage permission.
-- **A schema that already has room for the roadmap** — `geometryType`,
-  `geometryJson`, `parcelNumber` and `areaSqm` are in the table from version 1,
-  so polygon boundaries and parcel numbering can arrive without a migration.
+- **Geometry stored as GeoJSON in one column** — `geometryType`, `geometryJson`
+  and `areaSqm` have been in the table since version 1, so boundaries arrived
+  without a migration, and a ring is one text field rather than a second table
+  and a join. `parcelNumber` is there on the same terms, still unused.
 
 ### Tests
 
@@ -172,7 +182,6 @@ in-memory database.
 
 Planned, and already accounted for in the data model:
 
-- Polygon boundaries with area and perimeter
 - GPX, KML and GeoJSON export
 - Downloadable offline map areas
 - GPS track recording

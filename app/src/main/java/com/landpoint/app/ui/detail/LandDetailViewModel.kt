@@ -10,22 +10,32 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.landpoint.app.PendingDeletes
 import com.landpoint.app.R
 import com.landpoint.app.data.LandRepository
+import com.landpoint.app.data.OfflineMapStore
 import com.landpoint.app.data.SettingsRepository
 import com.landpoint.app.data.export.PdfExporter
 import com.landpoint.app.data.model.Land
 import com.landpoint.app.location.LocationProvider
 import com.landpoint.app.ui.container
 import com.landpoint.app.util.AppStrings
+import com.landpoint.app.util.GeoPoint
 import com.landpoint.app.util.GeoUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import org.osmdroid.mapsforge.MapsForgeTileSource
 
 data class LandDetailUiState(
     val land: Land? = null,
+    /**
+     * The saved corners, decoded once per emission — `Land.boundary` re-parses
+     * the stored JSON on every read, and the mini map redraws them on every
+     * recomposition of a screen that scrolls.
+     */
+    val boundary: List<GeoPoint> = emptyList(),
     val isLoading: Boolean = true,
     val dms: Boolean = false,
     val imperial: Boolean = false,
@@ -41,6 +51,7 @@ class LandDetailViewModel(
     private val pdfExporter: PdfExporter,
     private val strings: AppStrings,
     private val pendingDeletes: PendingDeletes,
+    private val offlineMapStore: OfflineMapStore,
     settings: SettingsRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -48,6 +59,13 @@ class LandDetailViewModel(
     private val landId: String = checkNotNull(savedStateHandle["landId"])
     private val currentLocation = MutableStateFlow<Pair<Double, Double>?>(null)
     private val message = MutableStateFlow<String?>(null)
+
+    /**
+     * An open file handle rather than state, so it is kept out of the UI state
+     * and disposed when the screen goes — the same arrangement as `MapViewModel`.
+     */
+    private val _vectorSource = MutableStateFlow<MapsForgeTileSource?>(null)
+    val vectorSource: StateFlow<MapsForgeTileSource?> = _vectorSource.asStateFlow()
 
     val uiState: StateFlow<LandDetailUiState> = combine(
         repository.observeLand(landId),
@@ -66,6 +84,7 @@ class LandDetailViewModel(
 
         LandDetailUiState(
             land = land,
+            boundary = land?.boundary.orEmpty(),
             isLoading = false,
             dms = format == SettingsRepository.CoordFormat.DMS,
             imperial = units == SettingsRepository.Units.IMPERIAL,
@@ -82,6 +101,16 @@ class LandDetailViewModel(
 
     init {
         refreshLocation()
+        viewModelScope.launch {
+            _vectorSource.value = offlineMapStore.vectorTileSource()
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // Holds every imported .map file open while this screen is alive.
+        _vectorSource.value?.dispose()
+        _vectorSource.value = null
     }
 
     fun refreshLocation() {
@@ -146,6 +175,7 @@ class LandDetailViewModel(
                     c.pdfExporter,
                     c.strings,
                     c.pendingDeletes,
+                    c.offlineMapStore,
                     c.settings,
                     createSavedStateHandle()
                 )

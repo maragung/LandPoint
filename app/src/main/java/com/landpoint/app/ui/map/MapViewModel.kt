@@ -9,6 +9,7 @@ import com.landpoint.app.data.OfflineMapStore
 import com.landpoint.app.data.model.Land
 import com.landpoint.app.location.LocationProvider
 import com.landpoint.app.ui.container
+import com.landpoint.app.util.GeoPoint
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +21,15 @@ import org.osmdroid.mapsforge.MapsForgeTileSource
 
 data class MapUiState(
     val lands: List<Land> = emptyList(),
+    /**
+     * Every mapped boundary, by land id.
+     *
+     * Parsed here rather than read from `Land.boundary` at draw time: that
+     * property re-decodes the stored JSON on every read, and the map's overlay
+     * block runs on every recomposition over every land on screen. A walked
+     * boundary holds hundreds of points, so the difference is a stutter on pan.
+     */
+    val boundaries: Map<String, List<GeoPoint>> = emptyMap(),
     val currentLocation: Pair<Double, Double>? = null,
     val isLoading: Boolean = true
 )
@@ -43,7 +53,14 @@ class MapViewModel(
         repository.observeLands(),
         currentLocation
     ) { lands, location ->
-        MapUiState(lands = lands, currentLocation = location, isLoading = false)
+        MapUiState(
+            lands = lands,
+            boundaries = lands.filter { it.isPolygon }
+                .associate { it.id to it.boundary }
+                .filterValues { it.size >= 3 },
+            currentLocation = location,
+            isLoading = false
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),

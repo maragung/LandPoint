@@ -3,12 +3,15 @@ package com.landpoint.app.ui.detail
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -55,12 +58,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.landpoint.app.R
@@ -68,10 +73,20 @@ import com.landpoint.app.data.model.Land
 import com.landpoint.app.data.model.Photo
 import androidx.compose.ui.res.pluralStringResource
 import com.landpoint.app.ui.components.LandShapeThumb
+import com.landpoint.app.ui.components.PARCEL_ZOOM
+import com.landpoint.app.ui.components.boundsOf
+import com.landpoint.app.ui.components.cornerMarkerIcon
+import com.landpoint.app.ui.components.drawBoundary
+import com.landpoint.app.ui.components.rememberLandMapView
 import com.landpoint.app.util.AreaFormat
+import com.landpoint.app.util.GeoPoint
 import com.landpoint.app.util.GeoUtils
 import com.landpoint.app.util.PolygonMath
 import com.landpoint.app.util.ShareUtils
+import org.osmdroid.mapsforge.MapsForgeTileSource
+import org.osmdroid.util.GeoPoint as OsmGeoPoint
+import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.TilesOverlay
 import kotlin.math.roundToInt
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -83,9 +98,11 @@ fun LandDetailScreen(
     onBack: () -> Unit,
     onEdit: (String) -> Unit,
     onCompass: (String) -> Unit,
+    onShape: (String) -> Unit,
     viewModel: LandDetailViewModel = viewModel(factory = LandDetailViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val vectorSource by viewModel.vectorSource.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHost = remember { SnackbarHostState() }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -195,8 +212,10 @@ fun LandDetailScreen(
             else -> DetailContent(
                 land = land,
                 state = state,
+                vectorSource = vectorSource,
                 onNavigate = { ShareUtils.navigateTo(context, land) },
                 onCompass = { onCompass(land.id) },
+                onShape = { onShape(land.id) },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
@@ -230,8 +249,10 @@ fun LandDetailScreen(
 private fun DetailContent(
     land: Land,
     state: LandDetailUiState,
+    vectorSource: MapsForgeTileSource?,
     onNavigate: () -> Unit,
     onCompass: () -> Unit,
+    onShape: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val dateFormat = remember { SimpleDateFormat("d MMM yyyy, HH:mm", Locale.getDefault()) }
@@ -313,6 +334,17 @@ private fun DetailContent(
                     )
                 }
             }
+        }
+
+        BoundaryMapCard(
+            land = land,
+            boundary = state.boundary,
+            vectorSource = vectorSource,
+            onOpen = onShape
+        )
+
+        if (state.boundary.isNotEmpty()) {
+            CornerCoordinates(boundary = state.boundary, dms = state.dms)
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -398,6 +430,135 @@ private fun DetailContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp)
         )
+    }
+}
+
+/**
+ * The plot as it sits on the ground, tappable through to the full-screen map.
+ *
+ * Deliberately not interactive: this card lives inside a scrolling form, and a
+ * pannable map here would swallow every drag meant for the page. It is a picture
+ * with one gesture — a tap that opens the real map, where panning belongs.
+ */
+@Composable
+private fun BoundaryMapCard(
+    land: Land,
+    boundary: List<GeoPoint>,
+    vectorSource: MapsForgeTileSource?,
+    onOpen: () -> Unit
+) {
+    val context = LocalContext.current
+    val isDark = isSystemInDarkTheme()
+    val boundaryColour = MaterialTheme.colorScheme.primary.toArgb()
+    val openLabel = stringResource(R.string.shape_open_preview)
+
+    val mapView = rememberLandMapView(
+        vectorSource = vectorSource,
+        interactive = false,
+        maxZoomWithoutVector = PARCEL_ZOOM
+    )
+    val hasCentred = remember(mapView) { mutableStateOf(false) }
+
+    Card {
+        Box(modifier = Modifier.fillMaxWidth().height(200.dp)) {
+            AndroidView(
+                factory = { mapView },
+                modifier = Modifier.fillMaxSize(),
+                update = { map ->
+                    map.overlayManager.tilesOverlay.setColorFilter(
+                        if (isDark) TilesOverlay.INVERT_COLORS else null
+                    )
+                    map.overlays.clear()
+
+                    map.drawBoundary(boundary, boundaryColour)
+                    boundary.forEachIndexed { index, point ->
+                        map.overlays.add(
+                            Marker(map).apply {
+                                position = OsmGeoPoint(point.latitude, point.longitude)
+                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                                icon = cornerMarkerIcon(
+                                    context,
+                                    (index + 1).toString(),
+                                    boundaryColour
+                                )
+                                // No info window: the tap belongs to the card.
+                                setOnMarkerClickListener { _, _ -> false }
+                            }
+                        )
+                    }
+                    if (boundary.isEmpty()) {
+                        map.overlays.add(
+                            Marker(map).apply {
+                                position = OsmGeoPoint(land.latitude, land.longitude)
+                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                                setOnMarkerClickListener { _, _ -> false }
+                            }
+                        )
+                    }
+
+                    if (!hasCentred.value) {
+                        val box = boundsOf(boundary)
+                        if (box != null) {
+                            map.post { map.zoomToBoundingBox(box, false) }
+                        } else {
+                            map.controller.setZoom(PARCEL_ZOOM - 2.0)
+                            map.controller.setCenter(OsmGeoPoint(land.latitude, land.longitude))
+                        }
+                        hasCentred.value = true
+                    }
+                    map.invalidate()
+                }
+            )
+
+            // In front of the map, because the MapView consumes touches itself.
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable(onClickLabel = openLabel, onClick = onOpen)
+            )
+        }
+    }
+}
+
+/**
+ * Every corner, numbered and in order.
+ *
+ * The numbers matter as much as the coordinates: the order is the outline, and
+ * this is the list someone reads against a survey letter. A walked boundary can
+ * hold hundreds of points, so only the first few are shown until asked.
+ */
+@Composable
+private fun CornerCoordinates(boundary: List<GeoPoint>, dms: Boolean) {
+    var expanded by remember { mutableStateOf(false) }
+    val collapsedCount = 10
+    val shown = if (expanded) boundary else boundary.take(collapsedCount)
+
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            stringResource(R.string.boundary_corners_title).uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        shown.forEachIndexed { index, point ->
+            Text(
+                stringResource(
+                    R.string.boundary_corner_number,
+                    index + 1,
+                    if (dms) GeoUtils.formatDMS(point.latitude, point.longitude)
+                    else GeoUtils.formatDecimal(point.latitude, point.longitude)
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+        if (boundary.size > collapsedCount) {
+            TextButton(onClick = { expanded = !expanded }) {
+                Text(
+                    if (expanded) stringResource(R.string.boundary_corners_collapse)
+                    else stringResource(R.string.boundary_corners_show_all, boundary.size)
+                )
+            }
+        }
     }
 }
 

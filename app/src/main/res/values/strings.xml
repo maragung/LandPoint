@@ -143,6 +143,34 @@
     <string name="corner_picker_done">Use this boundary</string>
     <string name="corner_picker_cancel">Cancel</string>
 
+    <!-- Editing individual corners -->
+    <string name="boundary_add_manual">Add from coordinates</string>
+    <string name="boundary_corners_title">Corner coordinates</string>
+    <string name="boundary_corner_number">#%1$d  %2$s</string>
+    <string name="boundary_corner_edit">Edit corner %1$d</string>
+    <string name="boundary_corner_delete">Delete corner %1$d</string>
+    <string name="boundary_corner_up">Move corner %1$d earlier</string>
+    <string name="boundary_corner_down">Move corner %1$d later</string>
+    <string name="boundary_corners_show_all">Show all %1$d corners</string>
+    <string name="boundary_corners_collapse">Show fewer</string>
+    <string name="boundary_order_hint">The order of the corners is the outline. Move a corner up or down if an edge crosses itself.</string>
+    <string name="corner_dialog_title_add">Add a corner</string>
+    <string name="corner_dialog_title_edit">Corner %1$d</string>
+    <string name="corner_dialog_lat">Latitude</string>
+    <string name="corner_dialog_lon">Longitude</string>
+    <string name="corner_dialog_hint">Decimal degrees, as printed on a survey letter — for example -6.914744 and 107.609810.</string>
+    <string name="error_corner_invalid">Enter both coordinates as decimal degrees, using a dot</string>
+    <string name="error_corner_duplicate">A corner is already recorded on that spot</string>
+    <string name="corner_picker_select_hint">Tap a corner to select it.</string>
+    <string name="corner_picker_delete_selected">Delete corner %1$d</string>
+    <string name="corner_picker_deselect">Clear selection</string>
+
+    <!-- Boundary preview -->
+    <string name="shape_title">Boundary</string>
+    <string name="shape_open_preview">Open the boundary on a map</string>
+    <string name="shape_edit_boundary">Edit boundary</string>
+    <string name="shape_no_boundary">No boundary recorded for this land yet. Edit it to mark the corners.</string>
+
     <!-- Walk-around measurement -->
     <string name="boundary_walk_start">Walk the boundary</string>
     <string name="boundary_walk_stop">Finish walk</string>

@@ -1,0 +1,62 @@
+name: Build & Test
+
+# Verification runs here rather than on a developer machine: this project's
+# Gradle is deliberately capped to one worker and a 1 GB heap for an 8 GB
+# laptop, so a full compile locally costs minutes of a machine someone is
+# using. Release builds stay in release.yml, triggered by a v* tag.
+on:
+  push:
+    # Every branch, not just main: this is the only place the project gets
+    # compiled, so work in progress has to be able to reach it.
+    branches:
+      - "**"
+    tags-ignore:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
+
+      # Kept so a change can be installed on a phone straight from the run page,
+      # without waiting for a release tag.
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LandPoint-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: app/build/reports/tests/
+          if-no-files-found: ignore

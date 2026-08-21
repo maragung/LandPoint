@@ -1,8 +1,6 @@
 package com.landpoint.app.ui.edit
 
-import android.graphics.Color as AndroidColor
-import android.graphics.drawable.ShapeDrawable
-import android.graphics.drawable.shapes.OvalShape
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -17,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,7 +30,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
@@ -43,27 +41,21 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.landpoint.app.R
+import com.landpoint.app.ui.components.PARCEL_ZOOM
+import com.landpoint.app.ui.components.boundsOf
+import com.landpoint.app.ui.components.cornerMarkerIcon
+import com.landpoint.app.ui.components.drawBoundary
+import com.landpoint.app.ui.components.drawLocationDot
+import com.landpoint.app.ui.components.rememberLandMapView
 import com.landpoint.app.util.AreaFormat
-import com.landpoint.app.util.GeoPoint as LandGeoPoint
 import org.osmdroid.events.MapEventsReceiver
-import org.osmdroid.mapsforge.MapsForgeTileProvider
 import org.osmdroid.mapsforge.MapsForgeTileSource
-import org.osmdroid.tileprovider.modules.SqlTileWriter
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import org.osmdroid.tileprovider.util.SimpleRegisterReceiver
-import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.Polygon
-import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.ScaleBarOverlay
 import org.osmdroid.views.overlay.TilesOverlay
-
-/** Close enough to read a fence line; MAPNIK stops here too. */
-private const val CORNER_ZOOM = 19.0
 
 /**
  * Picks boundary corners on a map.
@@ -84,6 +76,8 @@ fun CornerPickerScreen(
     currentLocation: Pair<Double, Double>?,
     onTapCorner: (Double, Double) -> Unit,
     onMoveCorner: (String, Double, Double) -> Unit,
+    onSelectCorner: (String) -> Unit,
+    onDeleteSelected: () -> Unit,
     onUseGps: () -> Unit,
     onUndo: () -> Unit,
     onClear: () -> Unit,
@@ -97,42 +91,12 @@ fun CornerPickerScreen(
 
     BackHandler { onCancel() }
 
-    // Rebuilt only when an imported vector map turns up: a mapsforge source is
-    // not something MapView's default provider can draw.
-    val mapView = remember(vectorSource) {
-        val view = if (vectorSource != null) {
-            MapView(
-                context,
-                MapsForgeTileProvider(
-                    SimpleRegisterReceiver(context),
-                    vectorSource,
-                    SqlTileWriter()
-                )
-            )
-        } else {
-            MapView(context)
-        }
-        view.apply {
-            setTileSource(vectorSource ?: TileSourceFactory.MAPNIK)
-            setUseDataConnection(vectorSource == null)
-            setMultiTouchControls(true)
-            isTilesScaledToDpi = true
-            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-            // Without a vector map there are no tiles past MAPNIK's last zoom, so
-            // stop there rather than let the user zoom into a blank grey field.
-            if (vectorSource == null) setMaxZoomLevel(CORNER_ZOOM)
-        }
-    }
+    val mapView = rememberLandMapView(
+        vectorSource = vectorSource,
+        maxZoomWithoutVector = PARCEL_ZOOM
+    )
 
     val hasCentred = remember(mapView) { mutableStateOf(false) }
-
-    DisposableEffect(mapView) {
-        mapView.onResume()
-        onDispose {
-            mapView.onPause()
-            mapView.onDetach()
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -154,7 +118,7 @@ fun CornerPickerScreen(
                     mapView.controller.animateTo(
                         GeoPoint(currentLocation.first, currentLocation.second)
                     )
-                    mapView.controller.setZoom(CORNER_ZOOM)
+                    mapView.controller.setZoom(PARCEL_ZOOM)
                 }) {
                     Icon(
                         Icons.Default.MyLocation,
@@ -175,9 +139,17 @@ fun CornerPickerScreen(
                         )
                         map.overlays.clear()
                         addTaplistener(map, onTapCorner)
-                        addShape(map, state.draftPoints, shapeColor)
-                        addCornerMarkers(map, state.draftBoundary, markerColor, onMoveCorner)
-                        currentLocation?.let { addLocationMarker(map, it) }
+                        map.drawBoundary(state.draftPoints, shapeColor)
+                        addCornerMarkers(
+                            map = map,
+                            context = context,
+                            corners = state.draftBoundary,
+                            selectedId = state.selectedCornerId,
+                            colour = markerColor,
+                            onMoveCorner = onMoveCorner,
+                            onSelectCorner = onSelectCorner
+                        )
+                        currentLocation?.let { (lat, lon) -> map.drawLocationDot(lat, lon) }
                         map.overlays.add(ScaleBarOverlay(map).apply { setAlignBottom(true) })
 
                         if (!hasCentred.value) {
@@ -207,6 +179,7 @@ fun CornerPickerScreen(
 
             PickerControls(
                 state = state,
+                onDeleteSelected = onDeleteSelected,
                 onUseGps = onUseGps,
                 onUndo = onUndo,
                 onClear = onClear,
@@ -238,62 +211,45 @@ private fun addTaplistener(map: MapView, onTapCorner: (Double, Double) -> Unit) 
     )
 }
 
-/** The land taking shape: a filled ring once it closes, a line before that. */
-private fun addShape(map: MapView, points: List<LandGeoPoint>, colour: Int) {
-    if (points.size < 2) return
-    val osm = points.map { GeoPoint(it.latitude, it.longitude) }
-
-    if (points.size >= 3) {
-        map.overlays.add(
-            Polygon(map).apply {
-                setPoints(osm)
-                fillPaint.color = AndroidColor.argb(60, AndroidColor.red(colour),
-                    AndroidColor.green(colour), AndroidColor.blue(colour))
-                outlinePaint.color = colour
-                outlinePaint.strokeWidth = 4f
-                // The shape is a readout, not a control; a tap on it belongs to
-                // the map underneath so a corner can still be placed inside.
-                setOnClickListener { _, _, _ -> false }
-            }
-        )
-    } else {
-        map.overlays.add(
-            Polyline(map).apply {
-                setPoints(osm)
-                outlinePaint.color = colour
-                outlinePaint.strokeWidth = 4f
-                setOnClickListener { _, _, _ -> false }
-            }
-        )
-    }
-}
-
 /**
- * One draggable marker per corner.
+ * One draggable, numbered marker per corner.
  *
- * The marker carries the corner's id, and a finished drag reports that id back
+ * The marker carries the corner's id, and both a drag and a tap report that id
  * rather than a position in the list: undo or clear can land mid-gesture, and an
  * index captured at drag start would by then mean a different corner, or none.
+ *
+ * The tap used to be swallowed outright, which left a mistaken corner in the
+ * middle of a ring only deletable by clearing the lot. It now selects, and the
+ * controls below offer to delete the one selected.
  */
 private fun addCornerMarkers(
     map: MapView,
+    context: Context,
     corners: List<DraftCorner>,
+    selectedId: String?,
     colour: Int,
-    onMoveCorner: (String, Double, Double) -> Unit
+    onMoveCorner: (String, Double, Double) -> Unit,
+    onSelectCorner: (String) -> Unit
 ) {
-    corners.forEach { corner ->
+    corners.forEachIndexed { index, corner ->
         map.overlays.add(
             Marker(map).apply {
                 id = corner.id
                 position = GeoPoint(corner.point.latitude, corner.point.longitude)
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                 isDraggable = true
-                icon = ShapeDrawable(OvalShape()).apply {
-                    intrinsicWidth = 34
-                    intrinsicHeight = 34
-                    paint.color = colour
+                icon = cornerMarkerIcon(
+                    context = context,
+                    label = (index + 1).toString(),
+                    colour = colour,
+                    highlighted = corner.id == selectedId
+                )
+                // True, so the tap stops here: passing it on would drop a fresh
+                // corner on top of the one just selected.
+                setOnMarkerClickListener { _, _ ->
+                    onSelectCorner(corner.id)
+                    true
                 }
-                setOnMarkerClickListener { _, _ -> true }
                 setOnMarkerDragListener(object : Marker.OnMarkerDragListener {
                     override fun onMarkerDragStart(marker: Marker) = Unit
                     override fun onMarkerDrag(marker: Marker) = Unit
@@ -304,22 +260,6 @@ private fun addCornerMarkers(
             }
         )
     }
-}
-
-/** Where the phone is, so the drawing has a reference even over blank tiles. */
-private fun addLocationMarker(map: MapView, location: Pair<Double, Double>) {
-    map.overlays.add(
-        Marker(map).apply {
-            position = GeoPoint(location.first, location.second)
-            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-            icon = ShapeDrawable(OvalShape()).apply {
-                intrinsicWidth = 28
-                intrinsicHeight = 28
-                paint.color = AndroidColor.parseColor("#1E88E5")
-            }
-            setOnMarkerClickListener { _, _ -> true }
-        }
-    )
 }
 
 /**
@@ -333,15 +273,12 @@ private fun centreOnStart(
     currentLocation: Pair<Double, Double>?
 ): Boolean {
     val drawn = state.draftPoints
-    if (drawn.size >= 2) {
-        val box = BoundingBox.fromGeoPointsSafe(
-            drawn.map { GeoPoint(it.latitude, it.longitude) }
-        ).increaseByScale(1.4f)
+    boundsOf(drawn)?.let { box ->
         map.zoomToBoundingBox(box, false)
         return true
     }
     val centre = when {
-        drawn.size == 1 -> GeoPoint(drawn[0].latitude, drawn[0].longitude)
+        drawn.isNotEmpty() -> GeoPoint(drawn[0].latitude, drawn[0].longitude)
         state.hasCoordinates -> GeoPoint(
             state.latitude.toDouble(),
             state.longitude.toDouble()
@@ -349,7 +286,7 @@ private fun centreOnStart(
         currentLocation != null -> GeoPoint(currentLocation.first, currentLocation.second)
         else -> return false
     }
-    map.controller.setZoom(CORNER_ZOOM)
+    map.controller.setZoom(PARCEL_ZOOM)
     map.controller.setCenter(centre)
     return true
 }
@@ -372,6 +309,11 @@ private fun HintBanner(hasVectorMap: Boolean, modifier: Modifier = Modifier) {
                 stringResource(R.string.corner_picker_tap_hint),
                 style = MaterialTheme.typography.labelMedium
             )
+            Text(
+                stringResource(R.string.corner_picker_select_hint),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             if (!hasVectorMap) {
                 Text(
                     stringResource(R.string.corner_picker_no_map),
@@ -387,6 +329,7 @@ private fun HintBanner(hasVectorMap: Boolean, modifier: Modifier = Modifier) {
 @Composable
 private fun PickerControls(
     state: LandEditUiState,
+    onDeleteSelected: () -> Unit,
     onUseGps: () -> Unit,
     onUndo: () -> Unit,
     onClear: () -> Unit,
@@ -434,6 +377,29 @@ private fun PickerControls(
                     OutlinedButton(onClick = onClear, enabled = !busy) {
                         Text(stringResource(R.string.boundary_clear))
                     }
+                }
+            }
+
+            // Only while a corner is selected, so the row does not sit there
+            // greyed out for the whole session — most boundaries need no deleting.
+            state.selectedCornerNumber?.let { number ->
+                OutlinedButton(
+                    onClick = onDeleteSelected,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        Icons.Outlined.Delete,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        "  " + stringResource(
+                            R.string.corner_picker_delete_selected,
+                            number
+                        ),
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
             }
 

@@ -26,6 +26,7 @@ import com.landpoint.app.location.GeoSample
 import com.landpoint.app.location.WalkTrack
 import com.landpoint.app.ui.container
 import com.landpoint.app.util.AppStrings
+import com.landpoint.app.util.BoundaryEdits
 import com.landpoint.app.util.CornerDraft
 import com.landpoint.app.util.GeoPoint
 import com.landpoint.app.util.PolygonMath
@@ -101,6 +102,11 @@ data class LandEditUiState(
      * boundary that was already there.
      */
     val draftBoundary: List<DraftCorner> = emptyList(),
+    /**
+     * The corner picked on the map, if any. Held as an id rather than an index
+     * for the same reason a drag is: the list is rebuilt on every change.
+     */
+    val selectedCornerId: String? = null,
     /** True while a walk-around measurement is recording. */
     val isWalking: Boolean = false,
     val walkedM: Double = 0.0,
@@ -128,6 +134,13 @@ data class LandEditUiState(
 
     /** The draft as plain points — what the map draws and what commit writes back. */
     val draftPoints: List<GeoPoint> get() = draftBoundary.map { it.point }
+
+    /** Position in the drawn ring of the selected corner, counting from 1. */
+    val selectedCornerNumber: Int?
+        get() = selectedCornerId
+            ?.let { id -> draftBoundary.indexOfFirst { it.id == id } }
+            ?.takeIf { it >= 0 }
+            ?.plus(1)
 
     /** Area of the shape being drawn, so the figure moves with each tap. */
     val draftAreaSqm: Double?
@@ -464,6 +477,72 @@ class LandEditViewModel(
         }
     }
 
+    // ---- Editing corners one at a time ------------------------------------
+    //
+    // Capture puts corners in; these take them apart again. Two things make this
+    // necessary rather than convenient: a boundary is often copied off a survey
+    // letter, where the coordinates are printed and there is nothing to stand
+    // on, and the *order* of the corners is the outline — a ring recorded out of
+    // sequence draws a bow tie and reports the wrong area.
+    //
+    // All of them refuse while a walk or an averaged capture is running, which is
+    // the same guard `openCornerPicker` uses: those two rewrite the boundary
+    // underneath, and an edit interleaved with them would be lost or fight them.
+
+    /**
+     * Adds a typed corner. Returns false when the input cannot be used, so the
+     * dialog can stay open with what the user typed still in it.
+     */
+    fun addBoundaryPointManual(latitude: String, longitude: String): Boolean {
+        if (boundaryEditsBlocked()) return false
+        val point = BoundaryEdits.parseLatLon(latitude, longitude) ?: run {
+            _uiState.update { it.copy(message = strings.get(R.string.error_corner_invalid)) }
+            return false
+        }
+        if (!BoundaryEdits.isDistinct(_uiState.value.boundary, point)) {
+            _uiState.update { it.copy(message = strings.get(R.string.error_corner_duplicate)) }
+            return false
+        }
+        _uiState.update { it.copy(boundary = it.boundary + point, message = null) }
+        return true
+    }
+
+    /** Retypes one corner in place, keeping its position in the ring. */
+    fun updateBoundaryPoint(index: Int, latitude: String, longitude: String): Boolean {
+        if (boundaryEditsBlocked()) return false
+        val point = BoundaryEdits.parseLatLon(latitude, longitude) ?: run {
+            _uiState.update { it.copy(message = strings.get(R.string.error_corner_invalid)) }
+            return false
+        }
+        // The corner being edited is excluded from the duplicate check, or
+        // correcting a typo in the longitude alone would be refused by itself.
+        if (!BoundaryEdits.isDistinct(_uiState.value.boundary, point, ignoreIndex = index)) {
+            _uiState.update { it.copy(message = strings.get(R.string.error_corner_duplicate)) }
+            return false
+        }
+        _uiState.update {
+            it.copy(boundary = BoundaryEdits.replaceAt(it.boundary, index, point), message = null)
+        }
+        return true
+    }
+
+    fun removeBoundaryPoint(index: Int) {
+        if (boundaryEditsBlocked()) return
+        _uiState.update { it.copy(boundary = BoundaryEdits.removeAt(it.boundary, index)) }
+    }
+
+    fun moveBoundaryPointUp(index: Int) = swapBoundaryPoints(index, index - 1)
+
+    fun moveBoundaryPointDown(index: Int) = swapBoundaryPoints(index, index + 1)
+
+    private fun swapBoundaryPoints(from: Int, to: Int) {
+        if (boundaryEditsBlocked()) return
+        _uiState.update { it.copy(boundary = BoundaryEdits.swap(it.boundary, from, to)) }
+    }
+
+    private fun boundaryEditsBlocked(): Boolean =
+        _uiState.value.let { it.isWalking || it.isCapturingCorner }
+
     // ---- Map corner picker ------------------------------------------------
     //
     // Standing on every corner is the accurate method and stays the default. The
@@ -483,6 +562,7 @@ class LandEditViewModel(
             it.copy(
                 isPickerOpen = true,
                 draftBoundary = it.boundary.map { point -> DraftCorner(newCornerId(), point) },
+                selectedCornerId = null,
                 message = null
             )
         }
@@ -509,6 +589,7 @@ class LandEditViewModel(
             it.copy(
                 boundary = it.draftPoints,
                 draftBoundary = emptyList(),
+                selectedCornerId = null,
                 isPickerOpen = false,
                 isCapturingCorner = false,
                 cornerSamples = 0
@@ -525,6 +606,7 @@ class LandEditViewModel(
         _uiState.update {
             it.copy(
                 draftBoundary = emptyList(),
+                selectedCornerId = null,
                 isPickerOpen = false,
                 isCapturingCorner = false,
                 cornerSamples = 0
@@ -562,17 +644,54 @@ class LandEditViewModel(
         }
     }
 
+    /**
+     * Selects the corner tapped on the map, or clears the selection when the
+     * same one is tapped again. Selection is what makes deleting a *particular*
+     * corner possible on the map — undo only ever reaches the last one placed.
+     */
+    fun selectDraftCorner(id: String?) {
+        _uiState.update {
+            it.copy(selectedCornerId = if (it.selectedCornerId == id) null else id)
+        }
+    }
+
+    fun removeDraftCorner(id: String) {
+        _uiState.update { state ->
+            if (state.draftBoundary.none { it.id == id }) state
+            else state.copy(
+                draftBoundary = state.draftBoundary.filterNot { it.id == id },
+                selectedCornerId = state.selectedCornerId?.takeIf { it != id }
+            )
+        }
+    }
+
+    /** What the picker's delete button calls; a no-op when nothing is selected. */
+    fun removeSelectedDraftCorner() {
+        _uiState.value.selectedCornerId?.let(::removeDraftCorner)
+    }
+
     fun undoDraftCorner() {
         _uiState.update {
             if (it.draftBoundary.isEmpty()) it
-            else it.copy(draftBoundary = it.draftBoundary.dropLast(1))
+            else {
+                val dropped = it.draftBoundary.last().id
+                it.copy(
+                    draftBoundary = it.draftBoundary.dropLast(1),
+                    selectedCornerId = it.selectedCornerId?.takeIf { id -> id != dropped }
+                )
+            }
         }
     }
 
     fun clearDraftCorners() {
         cornerJob?.cancel()
         _uiState.update {
-            it.copy(draftBoundary = emptyList(), isCapturingCorner = false, cornerSamples = 0)
+            it.copy(
+                draftBoundary = emptyList(),
+                selectedCornerId = null,
+                isCapturingCorner = false,
+                cornerSamples = 0
+            )
         }
     }
 

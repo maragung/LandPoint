@@ -32,6 +32,7 @@ import com.landpoint.app.ui.lands.LandListScreen
 import com.landpoint.app.ui.map.MapScreen
 import com.landpoint.app.ui.navigation.Routes
 import com.landpoint.app.ui.settings.SettingsScreen
+import com.landpoint.app.ui.shape.LandShapeScreen
 
 /**
  * The three places a user comes back to. Everything else — a land's detail, the
@@ -150,7 +151,8 @@ private fun LandPointGraph(
             LandDetailScreen(
                 onBack = { navController.popBackStack() },
                 onEdit = { id -> navController.navigate(Routes.edit(id)) },
-                onCompass = { id -> navController.navigate(Routes.compass(id)) }
+                onCompass = { id -> navController.navigate(Routes.compass(id)) },
+                onShape = { id -> navController.navigate(Routes.shape(id)) }
             )
         }
 
@@ -163,6 +165,13 @@ private fun LandPointGraph(
 
         composable(Routes.COMPASS, arguments = landIdArg) {
             CompassScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.SHAPE, arguments = landIdArg) {
+            LandShapeScreen(
+                onBack = { navController.popBackStack() },
+                onEdit = { id -> navController.navigate(Routes.edit(id)) }
+            )
         }
     }
 }

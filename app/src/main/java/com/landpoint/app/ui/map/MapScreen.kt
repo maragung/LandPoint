@@ -1,8 +1,5 @@
 package com.landpoint.app.ui.map
 
-import android.graphics.Color as AndroidColor
-import android.graphics.drawable.ShapeDrawable
-import android.graphics.drawable.shapes.OvalShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -20,13 +17,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -34,15 +30,18 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.landpoint.app.R
 import com.landpoint.app.data.model.Land
-import org.osmdroid.mapsforge.MapsForgeTileProvider
-import org.osmdroid.tileprovider.modules.SqlTileWriter
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import org.osmdroid.tileprovider.util.SimpleRegisterReceiver
-import org.osmdroid.util.BoundingBox
+import com.landpoint.app.ui.components.boundsOf
+import com.landpoint.app.ui.components.drawBoundary
+import com.landpoint.app.ui.components.drawLocationDot
+import com.landpoint.app.ui.components.rememberLandMapView
+import com.landpoint.app.util.GeoPoint as LandGeoPoint
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.TilesOverlay
+
+/** Where a single record sits comfortably on screen with its surroundings. */
+private const val SINGLE_LAND_ZOOM = 16.0
 
 /**
  * [onBack] is null when this is reached as a bottom-bar tab — no back arrow is
@@ -57,51 +56,13 @@ fun MapScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val vectorSource by viewModel.vectorSource.collectAsStateWithLifecycle()
-    val context = LocalContext.current
     val isDark = isSystemInDarkTheme()
+    val boundaryColour = MaterialTheme.colorScheme.primary.toArgb()
 
-    // Rebuilt when an imported vector map turns up, because a mapsforge source
-    // is not something MapView's default provider can draw — only
-    // MapsForgeTileProvider calls renderTile(). That happens at most once per
-    // visit, right after the file headers finish loading.
-    val mapView = remember(vectorSource) {
-        val source = vectorSource
-        val view = if (source != null) {
-            MapView(
-                context,
-                MapsForgeTileProvider(
-                    SimpleRegisterReceiver(context),
-                    source,
-                    SqlTileWriter()
-                )
-            )
-        } else {
-            MapView(context)
-        }
-        view.apply {
-            setTileSource(source ?: TileSourceFactory.MAPNIK)
-            // With a local vector map there is nothing to fetch; saying so keeps
-            // the map from reaching for a radio the user may have switched off.
-            setUseDataConnection(source == null)
-            setMultiTouchControls(true)
-            isTilesScaledToDpi = true
-            zoomController.setVisibility(
-                org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER
-            )
-            controller.setZoom(4.5)
-        }
-    }
+    val mapView = rememberLandMapView(vectorSource = vectorSource, initialZoom = 4.5)
 
     // Fit-to-content should happen once per visit, not once per process.
     val hasCentred = remember(mapView) { mutableStateOf(false) }
-
-    DisposableEffect(mapView) {
-        mapView.onResume()
-        onDispose {
-            mapView.onPause()
-            mapView.onDetach()
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -124,7 +85,7 @@ fun MapScreen(
                 viewModel.refreshLocation()
                 state.currentLocation?.let { (lat, lon) ->
                     mapView.controller.animateTo(GeoPoint(lat, lon))
-                    mapView.controller.setZoom(16.0)
+                    mapView.controller.setZoom(SINGLE_LAND_ZOOM)
                 }
             }) {
                 Icon(
@@ -148,23 +109,21 @@ fun MapScreen(
 
                     map.overlays.clear()
 
+                    // Shapes first, pins second: osmdroid hands a touch to the
+                    // topmost overlay, and the pin has to stay reachable inside
+                    // its own plot. Both open the same record either way.
+                    state.lands.forEach { land ->
+                        state.boundaries[land.id]?.let { ring ->
+                            map.drawBoundary(ring, boundaryColour) { onOpenLand(land.id) }
+                        }
+                    }
+
                     state.lands.forEach { land ->
                         map.overlays.add(land.toMarker(map, onOpenLand))
                     }
 
                     state.currentLocation?.let { (lat, lon) ->
-                        map.overlays.add(
-                            Marker(map).apply {
-                                position = GeoPoint(lat, lon)
-                                title = youAreHere
-                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                                icon = ShapeDrawable(OvalShape()).apply {
-                                    paint.color = AndroidColor.parseColor("#1E88E5")
-                                    intrinsicWidth = 28
-                                    intrinsicHeight = 28
-                                }
-                            }
-                        )
+                        map.drawLocationDot(lat, lon, youAreHere)
                     }
 
                     if (!hasCentred.value && centreOnContent(map, state)) {
@@ -204,29 +163,31 @@ private fun Land.toMarker(map: MapView, onOpenLand: (String) -> Unit): Marker =
         }
     }
 
-/** Fits the viewport to the markers. Returns true once it had something to fit. */
+/**
+ * Fits the viewport to everything saved. Returns true once it had something to
+ * fit.
+ *
+ * Measured over boundary corners, not just pins: a plot's pin is its centroid,
+ * so fitting to pins alone would cut the far edge of a large field off the
+ * screen — the one thing this view exists to show.
+ */
 private fun centreOnContent(map: MapView, state: MapUiState): Boolean {
-    val points = state.lands.map { GeoPoint(it.latitude, it.longitude) }
-    return when {
-        points.size > 1 -> {
-            val box = BoundingBox.fromGeoPointsSafe(points)
-            map.post { map.zoomToBoundingBox(box.increaseByScale(1.4f), false) }
-            true
-        }
-
-        points.size == 1 -> {
-            map.controller.setZoom(16.0)
-            map.controller.setCenter(points.first())
-            true
-        }
-
-        state.currentLocation != null -> {
-            val (lat, lon) = state.currentLocation
-            map.controller.setZoom(15.0)
-            map.controller.setCenter(GeoPoint(lat, lon))
-            true
-        }
-
-        else -> false
+    val points = state.lands.flatMap { land ->
+        state.boundaries[land.id] ?: listOf(LandGeoPoint(land.latitude, land.longitude))
     }
+
+    boundsOf(points)?.let { box ->
+        // Posted because a bounding box cannot be fitted to a view that has not
+        // been measured yet.
+        map.post { map.zoomToBoundingBox(box, false) }
+        return true
+    }
+
+    val centre = points.firstOrNull()
+        ?: state.currentLocation?.let { (lat, lon) -> LandGeoPoint(lat, lon) }
+        ?: return false
+
+    map.controller.setZoom(SINGLE_LAND_ZOOM)
+    map.controller.setCenter(GeoPoint(centre.latitude, centre.longitude))
+    return true
 }
