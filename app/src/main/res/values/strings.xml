@@ -306,6 +306,19 @@
     <string name="map_my_location">My location</string>
     <string name="map_you_are_here">You are here</string>
 
+    <!-- Spoken in place of a map. Everything a map shows - tiles, plots, pins -
+         is painted onto one canvas, so a screen reader walking the screen finds
+         an unlabelled box and says nothing at all. These say what is on the map
+         instead, and where the same facts can be read without one. -->
+    <string name="map_a11y_overview">Map. %1$s saved, %2$d of them with a boundary drawn. The list of lands says the same records in words.</string>
+    <string name="map_a11y_empty">Map. No land saved yet.</string>
+    <string name="shape_a11y_map">Map of the boundary: %1$s, area %2$s. The record lists every corner as coordinates.</string>
+    <string name="shape_a11y_map_no_area">Map of the boundary: %1$s, too few for an area.</string>
+    <string name="shape_a11y_map_point">Map. This land has no boundary saved, only its position.</string>
+    <string name="picker_a11y_map">Map for marking corners, %1$s so far. A tap puts a corner where the finger lands on the map. To give coordinates as numbers instead, go back and use %2$s.</string>
+    <string name="detail_a11y_map">Map of the boundary, %1$s. Opens the full map.</string>
+    <string name="detail_a11y_map_point">Map of where this land is. Opens the full map.</string>
+
     <!-- Settings -->
     <string name="settings_title">Settings</string>
     <string name="settings_section_language">Language</string>

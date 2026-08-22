@@ -49,6 +49,7 @@ import com.landpoint.app.ui.components.PARCEL_ZOOM
 import com.landpoint.app.ui.components.applyTileTheme
 import com.landpoint.app.ui.components.boundsOf
 import com.landpoint.app.ui.components.cornerMarkerIcon
+import com.landpoint.app.ui.components.describeForAccessibility
 import com.landpoint.app.ui.components.drawBoundary
 import com.landpoint.app.ui.components.drawLocationDot
 import com.landpoint.app.ui.components.rememberLandMapView
@@ -114,6 +115,20 @@ fun CornerPickerScreen(
     // tap, because the same 20dp is a metre at one zoom and fifty at another.
     val edgeTouchPx = with(LocalDensity.current) { EDGE_TOUCH_TARGET.toPx() }
 
+    // Placing a corner here means touching a spot on the glass, which is not a
+    // gesture a screen reader can offer. So the description says how many corners
+    // stand, and names the button on the form that does the same job by typing
+    // numbers — the accessible way to build the same boundary.
+    val mapDescription = stringResource(
+        R.string.picker_a11y_map,
+        pluralStringResource(
+            R.plurals.boundary_corners,
+            state.draftBoundary.size,
+            state.draftBoundary.size
+        ),
+        stringResource(R.string.boundary_add_manual)
+    )
+
     // The form's snackbar host is not composed while this screen is up, so a
     // message raised here — a tap refused for sitting on a corner, a corner
     // slotted into a side — had nowhere to appear until the picker closed. It
@@ -164,6 +179,7 @@ fun CornerPickerScreen(
                     modifier = Modifier.fillMaxSize(),
                     update = { map ->
                         map.applyTileTheme(isDark)
+                        map.describeForAccessibility(mapDescription)
                         map.overlays.clear()
                         addTaplistener(map, edgeTouchPx, onTapCorner)
                         map.drawBoundary(state.draftPoints, shapeColor)

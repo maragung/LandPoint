@@ -10,6 +10,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.ShapeDrawable
 import android.graphics.drawable.shapes.OvalShape
+import android.view.View
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -124,6 +125,27 @@ fun MapView.applyTileTheme(dark: Boolean) {
 
 /** One filter for the whole app: it holds nothing but the matrix. */
 private val nightTileFilter by lazy { ColorMatrixColorFilter(NightTiles.MATRIX) }
+
+/**
+ * Says in words what the map draws, for a screen reader.
+ *
+ * osmdroid paints the lot — tiles, plots, numbered corners, the location dot —
+ * onto a single canvas, so a service walking the view tree finds one unlabelled
+ * box and announces nothing at all. Short of shadowing every overlay with an
+ * invisible view there is no way to expose them as separate nodes, so each
+ * screen instead states what is on its map, and names the place the same facts
+ * can be reached without one.
+ *
+ * A null [description] takes the map out of the reading order entirely: for a
+ * map that is a picture behind a labelled control, the control does the talking
+ * and a second stop here would only say the same thing twice.
+ */
+fun MapView.describeForAccessibility(description: String?) {
+    contentDescription = description
+    importantForAccessibility =
+        if (description == null) View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        else View.IMPORTANT_FOR_ACCESSIBILITY_YES
+}
 
 /**
  * A boundary as it stands: a filled ring once it closes, a bare line before that.

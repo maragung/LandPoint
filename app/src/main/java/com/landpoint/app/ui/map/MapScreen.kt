@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -32,6 +33,7 @@ import com.landpoint.app.R
 import com.landpoint.app.data.model.Land
 import com.landpoint.app.ui.components.applyTileTheme
 import com.landpoint.app.ui.components.boundsOf
+import com.landpoint.app.ui.components.describeForAccessibility
 import com.landpoint.app.ui.components.drawBoundary
 import com.landpoint.app.ui.components.drawLocationDot
 import com.landpoint.app.ui.components.rememberLandMapView
@@ -98,12 +100,27 @@ fun MapScreen(
         // Resolved here because the AndroidView update block is not composable.
         val youAreHere = stringResource(R.string.map_you_are_here)
 
+        // What a screen reader gets instead of the map. Counts rather than names:
+        // a list of every plot read out on entering the tab would be unusable,
+        // and the list of lands — where each record is a labelled, openable row —
+        // is the same information in a form that can be navigated.
+        val mapDescription = if (state.lands.isEmpty()) {
+            stringResource(R.string.map_a11y_empty)
+        } else {
+            stringResource(
+                R.string.map_a11y_overview,
+                pluralStringResource(R.plurals.list_summary, state.lands.size, state.lands.size),
+                state.boundaries.size
+            )
+        }
+
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             AndroidView(
                 factory = { mapView },
                 modifier = Modifier.fillMaxSize(),
                 update = { map ->
                     map.applyTileTheme(isDark)
+                    map.describeForAccessibility(mapDescription)
 
                     map.overlays.clear()
 

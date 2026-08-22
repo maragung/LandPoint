@@ -46,6 +46,7 @@ import com.landpoint.app.ui.components.PARCEL_ZOOM
 import com.landpoint.app.ui.components.applyTileTheme
 import com.landpoint.app.ui.components.boundsOf
 import com.landpoint.app.ui.components.cornerMarkerIcon
+import com.landpoint.app.ui.components.describeForAccessibility
 import com.landpoint.app.ui.components.drawBoundary
 import com.landpoint.app.ui.components.drawLocationDot
 import com.landpoint.app.ui.components.rememberLandMapView
@@ -103,6 +104,26 @@ fun LandShapeScreen(
     }
     val attribution = stringResource(R.string.map_attribution_osm)
 
+    // The map spoken as a sentence. The corner coordinates themselves are on the
+    // record this screen was opened from, as a numbered list of text, so this
+    // says the shape's size and points there rather than reading out dozens of
+    // latitudes.
+    val mapDescription = when {
+        state.boundary.isEmpty() -> stringResource(R.string.shape_a11y_map_point)
+        else -> {
+            val corners = pluralStringResource(
+                R.plurals.boundary_corners,
+                state.boundary.size,
+                state.boundary.size
+            )
+            val area = state.areaSqm?.let {
+                stringResource(state.areaUnit.valueRes, AreaFormat.value(it, state.areaUnit))
+            }
+            if (area == null) stringResource(R.string.shape_a11y_map_no_area, corners)
+            else stringResource(R.string.shape_a11y_map, corners, area)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -153,6 +174,7 @@ fun LandShapeScreen(
                     modifier = Modifier.fillMaxSize(),
                     update = { map ->
                         map.applyTileTheme(isDark)
+                        map.describeForAccessibility(mapDescription)
                         map.overlays.clear()
 
                         map.drawBoundary(state.boundary, boundaryColour)

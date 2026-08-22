@@ -63,6 +63,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -77,6 +79,7 @@ import com.landpoint.app.ui.components.PARCEL_ZOOM
 import com.landpoint.app.ui.components.applyTileTheme
 import com.landpoint.app.ui.components.boundsOf
 import com.landpoint.app.ui.components.cornerMarkerIcon
+import com.landpoint.app.ui.components.describeForAccessibility
 import com.landpoint.app.ui.components.drawBoundary
 import com.landpoint.app.ui.components.rememberLandMapView
 import com.landpoint.app.util.AreaFormat
@@ -451,6 +454,16 @@ private fun BoundaryMapCard(
     val isDark = isSystemInDarkTheme()
     val boundaryColour = MaterialTheme.colorScheme.primary.toArgb()
     val openLabel = stringResource(R.string.shape_open_preview)
+    // Said by the transparent button in front of the map, not by the map: one
+    // stop in the reading order, describing the picture and what tapping it does.
+    val mapDescription = if (boundary.size >= 2) {
+        stringResource(
+            R.string.detail_a11y_map,
+            pluralStringResource(R.plurals.boundary_corners, boundary.size, boundary.size)
+        )
+    } else {
+        stringResource(R.string.detail_a11y_map_point)
+    }
 
     val mapView = rememberLandMapView(
         vectorSource = vectorSource,
@@ -466,6 +479,7 @@ private fun BoundaryMapCard(
                 modifier = Modifier.fillMaxSize(),
                 update = { map ->
                     map.applyTileTheme(isDark)
+                    map.describeForAccessibility(null)
                     map.overlays.clear()
 
                     map.drawBoundary(boundary, boundaryColour)
@@ -512,6 +526,7 @@ private fun BoundaryMapCard(
             Box(
                 modifier = Modifier
                     .matchParentSize()
+                    .semantics { contentDescription = mapDescription }
                     .clickable(onClickLabel = openLabel, onClick = onOpen)
             )
         }

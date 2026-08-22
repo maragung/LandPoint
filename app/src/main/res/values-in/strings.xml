@@ -295,6 +295,17 @@
     <string name="map_my_location">Lokasi saya</string>
     <string name="map_you_are_here">Anda di sini</string>
 
+    <!-- Dibacakan sebagai pengganti peta: isi peta digambar ke satu kanvas,
+         jadi pembaca layar tidak menemukan apa pun untuk dibacakan. -->
+    <string name="map_a11y_overview">Peta. %1$s tersimpan, %2$d di antaranya punya batas tergambar. Daftar tanah menyebutkan catatan yang sama dalam kata.</string>
+    <string name="map_a11y_empty">Peta. Belum ada tanah yang tersimpan.</string>
+    <string name="shape_a11y_map">Peta batas bidang: %1$s, luas %2$s. Rincian catatan mencantumkan koordinat setiap sudut.</string>
+    <string name="shape_a11y_map_no_area">Peta batas bidang: %1$s, belum cukup untuk menghitung luas.</string>
+    <string name="shape_a11y_map_point">Peta. Bidang ini belum punya batas tersimpan, hanya posisinya.</string>
+    <string name="picker_a11y_map">Peta untuk menandai sudut, %1$s sejauh ini. Ketukan menaruh sudut di tempat jari mendarat pada peta. Untuk memasukkan koordinat sebagai angka, kembali lalu pakai %2$s.</string>
+    <string name="detail_a11y_map">Peta batas bidang, %1$s. Membuka peta penuh.</string>
+    <string name="detail_a11y_map_point">Peta lokasi bidang ini. Membuka peta penuh.</string>
+
     <!-- Pengaturan -->
     <string name="settings_title">Pengaturan</string>
     <string name="settings_section_language">Bahasa</string>
