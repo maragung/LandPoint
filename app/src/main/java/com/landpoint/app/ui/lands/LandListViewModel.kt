@@ -18,6 +18,7 @@ import com.landpoint.app.location.LocationProvider
 import com.landpoint.app.ui.container
 import com.landpoint.app.util.AppStrings
 import com.landpoint.app.util.GeoUtils
+import com.landpoint.app.util.NaturalOrder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +32,7 @@ enum class SortOrder(@StringRes val labelRes: Int) {
     DATE_ASC(R.string.sort_date_asc),
     NAME_ASC(R.string.sort_name_asc),
     NAME_DESC(R.string.sort_name_desc),
+    PARCEL_ASC(R.string.sort_parcel_asc),
     DISTANCE(R.string.sort_distance),
     AREA_DESC(R.string.sort_area_desc),
     AREA_ASC(R.string.sort_area_asc)
@@ -59,6 +61,20 @@ internal fun SortOrder.comparator(): Comparator<Land> = when (this) {
     SortOrder.DATE_ASC -> compareBy { it.createdAt }
     SortOrder.NAME_ASC -> compareBy { it.name.lowercase() }
     SortOrder.NAME_DESC -> compareByDescending { it.name.lowercase() }
+    // Parcel numbers are text with numbers inside, so they need a comparison
+    // that reads `Blok A/2` as coming above `Blok A/10`. A land with no number at
+    // all sorts last: it is unregistered, not number zero. Name settles the ties,
+    // so that run has an order of its own rather than the database's.
+    SortOrder.PARCEL_ASC -> Comparator<Land> { a, b ->
+        val left = a.parcelNumber?.trim()?.ifBlank { null }
+        val right = b.parcelNumber?.trim()?.ifBlank { null }
+        when {
+            left != null && right != null -> NaturalOrder.compare(left, right)
+            left != null -> -1
+            right != null -> 1
+            else -> 0
+        }
+    }.thenBy { it.name.lowercase() }
     // Lands with no distance (location unknown) sort last rather than first.
     SortOrder.DISTANCE -> compareBy { it.distanceMeters ?: Double.MAX_VALUE }
     // Single-point lands have no area at all. They sort last in *both*

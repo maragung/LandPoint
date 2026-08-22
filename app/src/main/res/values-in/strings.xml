@@ -50,9 +50,12 @@
     <string name="sort_date_asc">Terlama dulu</string>
     <string name="sort_name_asc">Nama A–Z</string>
     <string name="sort_name_desc">Nama Z–A</string>
+    <string name="sort_parcel_asc">Menurut nomor bidang</string>
     <string name="sort_distance">Terdekat dulu</string>
     <string name="sort_area_desc">Luas terbesar dulu</string>
     <string name="sort_area_asc">Luas terkecil dulu</string>
+    <!-- Judul untuk bidang yang belum punya nomor, saat diurutkan menurut nomor -->
+    <string name="group_no_parcel">Tanpa nomor bidang</string>
 
     <!-- Memilih beberapa tanah sekaligus -->
     <string name="action_select">Pilih</string>

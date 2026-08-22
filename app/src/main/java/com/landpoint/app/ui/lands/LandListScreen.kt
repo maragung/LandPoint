@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
@@ -55,9 +55,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -278,41 +281,68 @@ fun LandListScreen(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                else -> LazyColumn(
-                    // The bottom inset clears the FAB. Without it the last card
-                    // sits under the button and cannot be scrolled out from
-                    // beneath it — the whole record becomes unreachable.
-                    contentPadding = PaddingValues(
-                        start = 16.dp,
-                        top = 12.dp,
-                        end = 16.dp,
-                        bottom = 96.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    item(key = "summary") {
-                        SummaryRow(
-                            count = state.lands.size,
-                            totalAreaSqm = state.totalAreaSqm,
-                            areaUnit = state.areaUnit
-                        )
+                else -> {
+                    val noParcelLabel = stringResource(R.string.group_no_parcel)
+                    // From the configuration rather than the default locale, so a
+                    // month heading follows the language the app is showing.
+                    val locale = LocalConfiguration.current.locales.get(0)
+                    // Grouping walks the whole list, so it runs when the list or
+                    // the order changes rather than on every recomposition.
+                    val rows = remember(state.lands, state.sortOrder, locale, noParcelLabel) {
+                        groupedRows(state.lands, state.sortOrder, locale, noParcelLabel)
                     }
 
-                    items(state.lands, key = { it.id }) { land ->
-                        LandCard(
-                            land = land,
-                            dms = state.dms,
-                            imperial = state.imperial,
-                            areaUnit = state.areaUnit,
-                            selecting = state.isSelecting,
-                            selected = land.id in state.selectedIds,
-                            onToggleSelect = { viewModel.toggleSelection(land.id) },
-                            onClick = { onOpenLand(land.id) },
-                            onNavigate = { ShareUtils.navigateTo(context, land) },
-                            // Deletes, undos and re-sorts slide instead of
-                            // snapping. Relies on the stable `key` above.
-                            modifier = Modifier.animateItem()
-                        )
+                    LazyColumn(
+                        // The bottom inset clears the FAB. Without it the last
+                        // card sits under the button and cannot be scrolled out
+                        // from beneath it — the whole record becomes unreachable.
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            top = 12.dp,
+                            end = 16.dp,
+                            bottom = 96.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        item(key = "summary") {
+                            SummaryRow(
+                                count = state.lands.size,
+                                totalAreaSqm = state.totalAreaSqm,
+                                areaUnit = state.areaUnit
+                            )
+                        }
+
+                        itemsIndexed(
+                            rows,
+                            // Headings are keyed by where they sit rather than by
+                            // what they say: two runs can end up reading the same,
+                            // and a repeated key is what a lazy list refuses.
+                            key = { index, row ->
+                                when (row) {
+                                    is LandRow.Header -> "header-$index"
+                                    is LandRow.Item -> row.land.id
+                                }
+                            }
+                        ) { _, row ->
+                            when (row) {
+                                is LandRow.Header -> GroupHeader(row)
+
+                                is LandRow.Item -> LandCard(
+                                    land = row.land,
+                                    dms = state.dms,
+                                    imperial = state.imperial,
+                                    areaUnit = state.areaUnit,
+                                    selecting = state.isSelecting,
+                                    selected = row.land.id in state.selectedIds,
+                                    onToggleSelect = { viewModel.toggleSelection(row.land.id) },
+                                    onClick = { onOpenLand(row.land.id) },
+                                    onNavigate = { ShareUtils.navigateTo(context, row.land) },
+                                    // Deletes, undos and re-sorts slide instead of
+                                    // snapping. Relies on the stable `key` above.
+                                    modifier = Modifier.animateItem()
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -357,6 +387,38 @@ private fun SummaryRow(
                 color = MaterialTheme.colorScheme.primary
             )
         }
+    }
+}
+
+/**
+ * A heading over a run of lands, naming what they share and counting them.
+ *
+ * Deliberately not pinned to the top of the screen while scrolling: `stickyHeader`
+ * is still experimental, and a heading that follows the scroll is worth less than
+ * one that cannot break. Marked as a heading for screen readers, which is what
+ * lets them jump between runs instead of reading every card.
+ */
+@Composable
+private fun GroupHeader(header: LandRow.Header) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 4.dp, end = 4.dp, top = 6.dp)
+            .semantics { heading() },
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            header.label,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.weight(1f, fill = false)
+        )
+        Text(
+            pluralStringResource(R.plurals.list_summary, header.count, header.count),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

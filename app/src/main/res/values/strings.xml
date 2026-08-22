@@ -51,9 +51,12 @@
     <string name="sort_date_asc">Oldest first</string>
     <string name="sort_name_asc">Name A–Z</string>
     <string name="sort_name_desc">Name Z–A</string>
+    <string name="sort_parcel_asc">By parcel number</string>
     <string name="sort_distance">Nearest first</string>
     <string name="sort_area_desc">Largest area first</string>
     <string name="sort_area_asc">Smallest area first</string>
+    <!-- Heading over the lands that have no parcel number, when sorted by one -->
+    <string name="group_no_parcel">No parcel number</string>
 
     <!-- Selecting several lands at once -->
     <string name="action_select">Select</string>
