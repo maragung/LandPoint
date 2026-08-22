@@ -10,8 +10,9 @@ remembering.
 
 ## Install
 
-1. Copy `LandPoint-1.0.0.apk` to your phone (USB, Bluetooth, Google Drive, email —
-   whatever you prefer).
+1. Download `LandPoint-<version>-release.apk` from the
+   [latest release](https://github.com/maragung/LandPoint/releases/latest), and copy
+   it to your phone (USB, Bluetooth, Google Drive, email — whatever you prefer).
 2. Open it with the phone's file manager.
 3. Android will ask permission to install apps from this source — allow it for
    the file manager / browser you used. This is normal for any app that does not
