@@ -124,12 +124,13 @@
         <item quantity="other">%1$d sudut</item>
     </plurals>
     <string name="msg_corner_too_close">Titik ini sama dengan sudut sebelumnya</string>
+    <string name="msg_corner_inserted">Ditambahkan sebagai sudut %1$d, pada sisi yang Anda ketuk</string>
 
     <!-- Pemilih sudut di peta -->
     <string name="boundary_pick_on_map">Pilih di peta</string>
     <string name="boundary_pin_centroid">Titik pin lahan: %1$s</string>
     <string name="corner_picker_title">Tandai sudut-sudut</string>
-    <string name="corner_picker_tap_hint">Ketuk peta untuk menandai sudut. Geser sudut untuk memindahkannya.</string>
+    <string name="corner_picker_tap_hint">Ketuk peta untuk menandai sudut, atau ketuk garisnya untuk menambah sudut di antara dua sudut yang dihubungkannya. Geser sudut untuk memindahkannya.</string>
     <string name="corner_picker_no_map">Peta offline belum diimpor, jadi latar kosong. Sudut, luas, dan posisi Anda tetap berfungsi.</string>
     <string name="corner_picker_use_gps">Pakai posisi saya</string>
     <string name="corner_picker_done">Pakai batas ini</string>
@@ -148,6 +149,7 @@
     <string name="boundary_order_hint">Urutan sudut menentukan bentuk bidangnya. Pindahkan sudut ke atas atau ke bawah bila garis batasnya saling menyilang.</string>
     <string name="corner_dialog_title_add">Tambah sudut</string>
     <string name="corner_dialog_title_edit">Sudut %1$d</string>
+    <string name="corner_dialog_title_insert">Sudut baru %1$d</string>
     <string name="corner_dialog_lat">Lintang</string>
     <string name="corner_dialog_lon">Bujur</string>
     <string name="corner_dialog_hint">Derajat desimal, seperti tertulis di surat ukur — misalnya -6.914744 dan 107.609810.</string>
@@ -404,8 +406,9 @@
     <string name="restore_password_unlock">Buka</string>
     <string name="password_show">Tampilkan sandi</string>
     <string name="password_hide">Sembunyikan sandi</string>
-    <string name="boundary_corner_tap_hint">Ketuk patok untuk mengubah atau menghapusnya.</string>
+    <string name="boundary_corner_tap_hint">Ketuk patok untuk mengubah, menghapus, atau menambah patok sesudahnya.</string>
     <string name="corner_sheet_title">Patok %1$d</string>
     <string name="corner_sheet_edit">Ubah koordinat</string>
     <string name="corner_sheet_delete">Hapus patok ini</string>
+    <string name="corner_sheet_insert">Sisipkan patok jadi nomor %1$d</string>
 </resources>

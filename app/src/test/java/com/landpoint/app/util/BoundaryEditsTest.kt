@@ -179,4 +179,110 @@ class BoundaryEditsTest {
         assertEquals(GeoPoint(90.0, 180.0), BoundaryEdits.parseLatLon("90", "180"))
         assertEquals(GeoPoint(-90.0, -180.0), BoundaryEdits.parseLatLon("-90", "-180"))
     }
+
+    // ---- edgeNear ----------------------------------------------------------
+    //
+    // This is the hit test behind tapping a boundary line to add a corner into
+    // it. Getting it wrong in either direction is bad in a specific way: too
+    // eager and a corner meant for open ground lands mid-ring, renumbering the
+    // outline; too shy and the gesture simply does not work.
+
+    @Test
+    fun `a tap on a side gives the index that inserts into it`() {
+        // Half way along the first side, which runs from corner 1 to corner 2.
+        assertEquals(1, BoundaryEdits.edgeNear(square, offset(0.0, 10.0), 2.0))
+        // The side from corner 2 to corner 3.
+        assertEquals(2, BoundaryEdits.edgeNear(square, offset(10.0, 20.0), 2.0))
+    }
+
+    @Test
+    fun `a tap on the closing side appends`() {
+        // The ring's last side runs from the last corner back to the first, so a
+        // corner on it belongs at the end — where appending would have put it.
+        assertEquals(square.size, BoundaryEdits.edgeNear(square, offset(10.0, 0.0), 2.0))
+    }
+
+    @Test
+    fun `a tap in open ground is not on any side`() {
+        // The middle of a 20 m square: 10 m from the nearest side.
+        assertNull(BoundaryEdits.edgeNear(square, offset(10.0, 10.0), 2.0))
+        // Outside the square altogether.
+        assertNull(BoundaryEdits.edgeNear(square, offset(-8.0, 10.0), 2.0))
+    }
+
+    @Test
+    fun `the tolerance is what decides, and it is a distance in metres`() {
+        val threeMetresOut = offset(-3.0, 10.0)
+        assertNull(BoundaryEdits.edgeNear(square, threeMetresOut, 2.0))
+        assertEquals(1, BoundaryEdits.edgeNear(square, threeMetresOut, 5.0))
+    }
+
+    @Test
+    fun `a tap past the end of a side measures to the corner, not to the line`() {
+        // Two corners running east. A tap 10 m beyond the second one is 10 m from
+        // the side; on the infinite line through them it would be zero, which
+        // would have inserted a corner into a side the tap was nowhere near.
+        val line = listOf(square[0], square[1])
+        assertNull(BoundaryEdits.edgeNear(line, offset(0.0, 30.0), 5.0))
+        assertEquals(1, BoundaryEdits.edgeNear(line, offset(0.0, 10.0), 5.0))
+    }
+
+    @Test
+    fun `the nearest side wins when two are in range`() {
+        // Near corner 2, but a metre inside the second side rather than the first.
+        val nearCorner2 = offset(4.0, 19.5)
+        assertEquals(2, BoundaryEdits.edgeNear(square, nearCorner2, 6.0))
+    }
+
+    @Test
+    fun `there is no side to land on without at least two corners`() {
+        assertNull(BoundaryEdits.edgeNear(emptyList(), square[0], 5.0))
+        assertNull(BoundaryEdits.edgeNear(listOf(square[0]), offset(0.0, 1.0), 5.0))
+    }
+
+    @Test
+    fun `a tolerance of zero switches the whole gesture off`() {
+        // The default, so a caller that has no idea of scale keeps the old
+        // behaviour of appending rather than guessing at an insertion.
+        assertNull(BoundaryEdits.edgeNear(square, offset(0.0, 10.0), 0.0))
+        assertNull(BoundaryEdits.edgeNear(square, offset(0.0, 10.0), -1.0))
+    }
+
+    @Test
+    fun `a side cannot claim a tap far away just because the tolerance is huge`() {
+        // What a very low zoom hands in: a fingertip covering more ground than
+        // the parcel. Without a cap every tap would insert into a side and the
+        // middle of the shape would become unreachable for appending.
+        val middle = offset(10.0, 10.0)
+        assertNull(BoundaryEdits.edgeNear(square, middle, 500.0))
+        // Close to a side, the same absurd tolerance still works.
+        assertEquals(1, BoundaryEdits.edgeNear(square, offset(1.0, 10.0), 500.0))
+    }
+
+    // ---- edgeMidpoint ------------------------------------------------------
+
+    @Test
+    fun `the midpoint of a side is half way along it`() {
+        val middle = BoundaryEdits.edgeMidpoint(square, 0)!!
+        val expected = offset(0.0, 10.0)
+        assertEquals(expected.latitude, middle.latitude, 1e-9)
+        assertEquals(expected.longitude, middle.longitude, 1e-9)
+    }
+
+    @Test
+    fun `the last side closes the ring, so its midpoint does too`() {
+        val middle = BoundaryEdits.edgeMidpoint(square, square.size - 1)!!
+        val expected = offset(10.0, 0.0)
+        assertEquals(expected.latitude, middle.latitude, 1e-9)
+        assertEquals(expected.longitude, middle.longitude, 1e-9)
+    }
+
+    @Test
+    fun `a side that does not exist has no midpoint`() {
+        assertNull(BoundaryEdits.edgeMidpoint(square, -1))
+        assertNull(BoundaryEdits.edgeMidpoint(square, square.size))
+        assertNull(BoundaryEdits.edgeMidpoint(listOf(square[0]), 0))
+        // Two corners make one side, and it is not the second one.
+        assertNull(BoundaryEdits.edgeMidpoint(listOf(square[0], square[1]), 1))
+    }
 }

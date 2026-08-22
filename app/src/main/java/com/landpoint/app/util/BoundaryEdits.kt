@@ -1,5 +1,9 @@
 package com.landpoint.app.util
 
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.hypot
+
 /**
  * Edits to a boundary that is already drawn, as opposed to one being captured.
  *
@@ -65,6 +69,71 @@ object BoundaryEdits {
     )
 
     /**
+     * The side of the boundary that [candidate] falls on, given back as the index
+     * to insert at, or null when it falls on no side within [toleranceM].
+     *
+     * This is what makes a *missed* corner fixable. Adding a corner has always
+     * appended it to the end of the ring, which is right while the outline is
+     * being drawn corner by corner and wrong the moment the outline is closed:
+     * a corner that belongs between #2 and #3 appended as #7 draws a spike
+     * across the parcel, and putting it right meant pressing move-up four times.
+     *
+     * A ring's last side runs from the last corner back to the first, so a
+     * candidate on that one inserts at the end — which is where it would have
+     * gone anyway.
+     */
+    fun edgeNear(points: List<GeoPoint>, candidate: GeoPoint, toleranceM: Double): Int? {
+        if (points.size < 2 || toleranceM <= 0.0) return null
+        // Two corners are a line with one side; three or more close into a ring,
+        // which has one side per corner.
+        val sides = if (points.size == 2) 1 else points.size
+        var best = -1
+        var bestDistance = Double.MAX_VALUE
+        for (i in 0 until sides) {
+            val from = points[i]
+            val to = points[(i + 1) % points.size]
+            val distance = distanceToSegmentM(candidate, from, to)
+            if (distance >= bestDistance) continue
+            // Zoomed far enough out, a fingertip covers more ground than the whole
+            // parcel, and every tap anywhere on it would count as landing on a
+            // side — including the ones aimed at open ground in the middle. So a
+            // side may only claim a candidate that is close relative to its own
+            // length, however generous the tolerance handed in.
+            val reach = minOf(
+                toleranceM,
+                GeoUtils.distance(from.latitude, from.longitude, to.latitude, to.longitude) *
+                    MAX_EDGE_REACH
+            )
+            if (distance > reach) continue
+            bestDistance = distance
+            best = i
+        }
+        return if (best < 0) null else best + 1
+    }
+
+    /**
+     * The halfway point of one side, or null when there is no such side.
+     *
+     * Offered as the starting value when a corner is inserted by hand: a corner
+     * added between two others is nearly always somewhere along the line between
+     * them, so half way there is a shorter edit than an empty field — and it is
+     * already a legal corner if the user simply accepts it.
+     */
+    fun edgeMidpoint(points: List<GeoPoint>, index: Int): GeoPoint? {
+        if (points.size < 2) return null
+        if (index !in points.indices) return null
+        if (points.size == 2 && index != 0) return null
+        val from = points[index]
+        val to = points[(index + 1) % points.size]
+        // Straight average of the coordinates. Across a parcel — tens of metres —
+        // the difference from the great-circle midpoint is under a millimetre.
+        return GeoPoint(
+            latitude = (from.latitude + to.latitude) / 2.0,
+            longitude = (from.longitude + to.longitude) / 2.0
+        )
+    }
+
+    /**
      * Reads a corner typed into two text fields, or null when either field is
      * not a coordinate.
      *
@@ -81,4 +150,36 @@ object BoundaryEdits {
         if (longitude !in -180.0..180.0) return null
         return GeoPoint(latitude = latitude, longitude = longitude)
     }
+
+    /**
+     * How far [p] is from the line between [a] and [b], in metres.
+     *
+     * Flat-earth, on a projection centred on [a]: the distances being measured
+     * here are the width of a fingertip on a parcel map, where the curvature of
+     * the earth is orders of magnitude below the GPS noise in the corners
+     * themselves.
+     */
+    private fun distanceToSegmentM(p: GeoPoint, a: GeoPoint, b: GeoPoint): Double {
+        val metresPerDegree = EARTH_RADIUS_M * PI / 180.0
+        val metresPerDegreeLon = metresPerDegree * cos(a.latitude * PI / 180.0)
+        val px = (p.longitude - a.longitude) * metresPerDegreeLon
+        val py = (p.latitude - a.latitude) * metresPerDegree
+        val bx = (b.longitude - a.longitude) * metresPerDegreeLon
+        val by = (b.latitude - a.latitude) * metresPerDegree
+        val lengthSq = bx * bx + by * by
+        if (lengthSq == 0.0) return hypot(px, py)
+        // Clamped, so a candidate off the end of the side measures to the corner
+        // rather than to the infinite line through it.
+        val along = ((px * bx + py * by) / lengthSq).coerceIn(0.0, 1.0)
+        return hypot(px - along * bx, py - along * by)
+    }
+
+    private const val EARTH_RADIUS_M = 6371000.0
+
+    /**
+     * The furthest from a side a tap may be and still be read as on it, as a
+     * fraction of that side's length. A quarter keeps the middle of even a
+     * three-corner parcel reachable for appending.
+     */
+    private const val MAX_EDGE_REACH = 0.25
 }

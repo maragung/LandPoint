@@ -132,12 +132,13 @@
         <item quantity="other">%1$d corners</item>
     </plurals>
     <string name="msg_corner_too_close">That is the same spot as the last corner</string>
+    <string name="msg_corner_inserted">Added as corner %1$d, on the side you tapped</string>
 
     <!-- Map corner picker -->
     <string name="boundary_pick_on_map">Pick on map</string>
     <string name="boundary_pin_centroid">Land pin: %1$s</string>
     <string name="corner_picker_title">Mark the corners</string>
-    <string name="corner_picker_tap_hint">Tap the map to place a corner. Drag a corner to move it.</string>
+    <string name="corner_picker_tap_hint">Tap the map to place a corner, or tap a line to add one between the two corners it joins. Drag a corner to move it.</string>
     <string name="corner_picker_no_map">No offline map imported, so the background is blank. Corners, area and your position still work.</string>
     <string name="corner_picker_use_gps">Use my position</string>
     <string name="corner_picker_done">Use this boundary</string>
@@ -156,6 +157,7 @@
     <string name="boundary_order_hint">The order of the corners is the outline. Move a corner up or down if an edge crosses itself.</string>
     <string name="corner_dialog_title_add">Add a corner</string>
     <string name="corner_dialog_title_edit">Corner %1$d</string>
+    <string name="corner_dialog_title_insert">New corner %1$d</string>
     <string name="corner_dialog_lat">Latitude</string>
     <string name="corner_dialog_lon">Longitude</string>
     <string name="corner_dialog_hint">Decimal degrees, as printed on a survey letter — for example -6.914744 and 107.609810.</string>
@@ -420,8 +422,9 @@
     <string name="restore_password_unlock">Open</string>
     <string name="password_show">Show password</string>
     <string name="password_hide">Hide password</string>
-    <string name="boundary_corner_tap_hint">Tap a corner to change or delete it.</string>
+    <string name="boundary_corner_tap_hint">Tap a corner to change it, delete it, or add one after it.</string>
     <string name="corner_sheet_title">Corner %1$d</string>
     <string name="corner_sheet_edit">Change coordinates</string>
     <string name="corner_sheet_delete">Delete this corner</string>
+    <string name="corner_sheet_insert">Insert a corner as %1$d</string>
 </resources>

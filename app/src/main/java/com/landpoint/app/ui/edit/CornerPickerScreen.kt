@@ -26,16 +26,20 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -58,6 +62,14 @@ import org.osmdroid.views.overlay.ScaleBarOverlay
 import org.osmdroid.views.overlay.TilesOverlay
 
 /**
+ * How close a tap has to be to an outline to count as landing *on* it rather
+ * than beside it. Smaller than a touch target on purpose: overshooting turns an
+ * intended new corner into a corner inserted mid-ring, which is the more
+ * surprising of the two mistakes.
+ */
+private val EDGE_TOUCH_TARGET = 20.dp
+
+/**
  * Picks boundary corners on a map.
  *
  * The corner-by-corner GPS capture on the form stays the accurate method and is
@@ -74,7 +86,8 @@ fun CornerPickerScreen(
     state: LandEditUiState,
     vectorSource: MapsForgeTileSource?,
     currentLocation: Pair<Double, Double>?,
-    onTapCorner: (Double, Double) -> Unit,
+    onTapCorner: (Double, Double, Double) -> Unit,
+    onMessageShown: () -> Unit,
     onMoveCorner: (String, Double, Double) -> Unit,
     onSelectCorner: (String) -> Unit,
     onDeleteSelected: () -> Unit,
@@ -97,8 +110,24 @@ fun CornerPickerScreen(
     )
 
     val hasCentred = remember(mapView) { mutableStateOf(false) }
+    // A fingertip, in pixels. Converted to ground distance at the moment of each
+    // tap, because the same 20dp is a metre at one zoom and fifty at another.
+    val edgeTouchPx = with(LocalDensity.current) { EDGE_TOUCH_TARGET.toPx() }
+
+    // The form's snackbar host is not composed while this screen is up, so a
+    // message raised here — a tap refused for sitting on a corner, a corner
+    // slotted into a side — had nowhere to appear until the picker closed. It
+    // gets its own host.
+    val snackbarHost = remember { SnackbarHostState() }
+    LaunchedEffect(state.message) {
+        state.message?.let {
+            snackbarHost.showSnackbar(it)
+            onMessageShown()
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.corner_picker_title)) },
@@ -138,7 +167,7 @@ fun CornerPickerScreen(
                             if (isDark) TilesOverlay.INVERT_COLORS else null
                         )
                         map.overlays.clear()
-                        addTaplistener(map, onTapCorner)
+                        addTaplistener(map, edgeTouchPx, onTapCorner)
                         map.drawBoundary(state.draftPoints, shapeColor)
                         addCornerMarkers(
                             map = map,
@@ -191,18 +220,31 @@ fun CornerPickerScreen(
 }
 
 /**
- * Turns a tap on empty map into a corner.
+ * Turns a tap on the map into a corner.
  *
  * Added at index 0 so the markers and shape stacked above it get first refusal
  * on the touch — dragging a corner must not also drop a new one underneath it.
+ *
+ * The third value handed on is how many metres [edgeTouchPx] covers on the ground
+ * where the tap landed. A finger is a fixed size on the glass and a wildly
+ * varying distance on the ground, so the "did this land on the outline?" question
+ * can only be answered at the moment of the tap, at the zoom it was made — which
+ * is why the conversion happens here and not in the ViewModel.
  */
-private fun addTaplistener(map: MapView, onTapCorner: (Double, Double) -> Unit) {
+private fun addTaplistener(
+    map: MapView,
+    edgeTouchPx: Float,
+    onTapCorner: (Double, Double, Double) -> Unit
+) {
     map.overlays.add(
         0,
         MapEventsOverlay(object : MapEventsReceiver {
             override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
                 p ?: return false
-                onTapCorner(p.latitude, p.longitude)
+                val pixelsPerMetre = map.projection.metersToPixels(1f)
+                val tolerance =
+                    if (pixelsPerMetre > 0f) (edgeTouchPx / pixelsPerMetre).toDouble() else 0.0
+                onTapCorner(p.latitude, p.longitude, tolerance)
                 return true
             }
 

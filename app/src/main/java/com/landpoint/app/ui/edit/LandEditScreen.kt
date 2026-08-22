@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.outlined.AddLocationAlt
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.EditLocationAlt
@@ -82,6 +83,7 @@ import com.landpoint.app.R
 import com.landpoint.app.data.SettingsRepository
 import com.landpoint.app.location.FixQuality
 import com.landpoint.app.util.AreaFormat
+import com.landpoint.app.util.BoundaryEdits
 import com.landpoint.app.util.GeoPoint
 import com.landpoint.app.util.GeoUtils
 import java.io.File
@@ -115,7 +117,12 @@ fun LandEditScreen(
         uri?.let { viewModel.onPhotoPicked(it) }
     }
 
-    LaunchedEffect(state.message) {
+    // Skipped while the map picker is up: it draws over this screen, taking the
+    // Scaffold and its snackbar host with it, and a message shown into a host
+    // that is not composed waits there until the picker closes. The picker shows
+    // its own.
+    LaunchedEffect(state.message, state.isPickerOpen) {
+        if (state.isPickerOpen) return@LaunchedEffect
         state.message?.let {
             snackbarHost.showSnackbar(it)
             viewModel.consumeMessage()
@@ -133,6 +140,7 @@ fun LandEditScreen(
             vectorSource = vectorSource,
             currentLocation = currentLocation,
             onTapCorner = viewModel::addDraftCornerAt,
+            onMessageShown = viewModel::consumeMessage,
             onMoveCorner = viewModel::moveDraftCorner,
             onSelectCorner = viewModel::selectDraftCorner,
             onDeleteSelected = viewModel::removeSelectedDraftCorner,
@@ -232,6 +240,7 @@ fun LandEditScreen(
                     onStopWalk = viewModel::stopWalk,
                     onAddManual = viewModel::addBoundaryPointManual,
                     onUpdateCorner = viewModel::updateBoundaryPoint,
+                    onInsertCorner = viewModel::insertBoundaryPointManual,
                     onRemoveCorner = viewModel::removeBoundaryPoint,
                     onMoveCornerUp = viewModel::moveBoundaryPointUp,
                     onMoveCornerDown = viewModel::moveBoundaryPointDown
@@ -484,6 +493,7 @@ private fun BoundarySection(
     onStopWalk: () -> Unit,
     onAddManual: (String, String) -> Int?,
     onUpdateCorner: (Int, String, String) -> Int?,
+    onInsertCorner: (Int, String, String) -> Int?,
     onRemoveCorner: (Int) -> Unit,
     onMoveCornerUp: (Int) -> Unit,
     onMoveCornerDown: (Int) -> Unit
@@ -493,9 +503,7 @@ private fun BoundarySection(
     // being rewritten underneath it. Freeze them rather than race the track.
     val busy = state.isCapturingCorner || state.isWalking
 
-    // Null index means the dialog is adding rather than correcting.
-    var dialogOpen by remember { mutableStateOf(false) }
-    var editIndex by remember { mutableStateOf<Int?>(null) }
+    var dialogTarget by remember { mutableStateOf<CornerDialogTarget?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.boundary_title), style = MaterialTheme.typography.titleSmall)
@@ -557,8 +565,7 @@ private fun BoundarySection(
         // are already written down.
         OutlinedButton(
             onClick = {
-                editIndex = null
-                dialogOpen = true
+                dialogTarget = CornerDialogTarget.Append
             },
             enabled = !busy
         ) {
@@ -590,10 +597,10 @@ private fun BoundarySection(
             CornerList(
                 boundary = state.boundary,
                 enabled = !busy,
-                onEdit = { index ->
-                    editIndex = index
-                    dialogOpen = true
-                },
+                onEdit = { index -> dialogTarget = CornerDialogTarget.Edit(index) },
+                // After corner #n means position n+1 in the ring, which is also
+                // the number the new corner will carry.
+                onInsertAfter = { index -> dialogTarget = CornerDialogTarget.Insert(index + 1) },
                 onRemove = onRemoveCorner,
                 onMoveUp = onMoveCornerUp,
                 onMoveDown = onMoveCornerDown
@@ -637,22 +644,61 @@ private fun BoundarySection(
         }
     }
 
-    if (dialogOpen) {
-        val index = editIndex
+    dialogTarget?.let { target ->
         CornerCoordinateDialog(
-            number = index?.plus(1),
-            initial = index?.let { state.boundary.getOrNull(it) },
-            onDismiss = { dialogOpen = false },
+            number = when (target) {
+                CornerDialogTarget.Append -> null
+                is CornerDialogTarget.Edit -> target.index + 1
+                is CornerDialogTarget.Insert -> target.index + 1
+            },
+            inserting = target is CornerDialogTarget.Insert,
+            initial = when (target) {
+                CornerDialogTarget.Append -> null
+                is CornerDialogTarget.Edit -> state.boundary.getOrNull(target.index)
+                // Half way along the side it is being slotted into: a corner
+                // between two others is nearly always on the line between them,
+                // so this is usually a nudge rather than a fresh reading.
+                is CornerDialogTarget.Insert ->
+                    BoundaryEdits.edgeMidpoint(state.boundary, target.index - 1)?.rounded()
+            },
+            onDismiss = { dialogTarget = null },
             onConfirm = { lat, lon ->
-                val refusal =
-                    if (index == null) onAddManual(lat, lon)
-                    else onUpdateCorner(index, lat, lon)
-                if (refusal == null) dialogOpen = false
+                val refusal = when (target) {
+                    CornerDialogTarget.Append -> onAddManual(lat, lon)
+                    is CornerDialogTarget.Edit -> onUpdateCorner(target.index, lat, lon)
+                    is CornerDialogTarget.Insert -> onInsertCorner(target.index, lat, lon)
+                }
+                if (refusal == null) dialogTarget = null
                 refusal
             }
         )
     }
 }
+
+/** What the coordinate dialog was opened for. */
+private sealed interface CornerDialogTarget {
+    /** Onto the end of the ring. */
+    data object Append : CornerDialogTarget
+
+    /** Correcting the corner already at [index]. */
+    data class Edit(val index: Int) : CornerDialogTarget
+
+    /** A new corner landing at [index], between two that already exist. */
+    data class Insert(val index: Int) : CornerDialogTarget
+}
+
+/**
+ * Trims a computed midpoint to a length that reads as a coordinate.
+ *
+ * Averaging two coordinates leaves float noise — `-6.914543999999999` — and that
+ * is what the user would be shown as the suggested corner. Seven decimals is
+ * about a centimetre, far finer than any of these corners were measured to, so
+ * nothing real is lost by not showing the rest.
+ */
+private fun GeoPoint.rounded(): GeoPoint = GeoPoint(
+    latitude = "%.7f".format(java.util.Locale.US, latitude).toDouble(),
+    longitude = "%.7f".format(java.util.Locale.US, longitude).toDouble()
+)
 
 /**
  * The corners in the order they are joined up, each one editable.
@@ -670,6 +716,7 @@ private fun CornerList(
     boundary: List<GeoPoint>,
     enabled: Boolean,
     onEdit: (Int) -> Unit,
+    onInsertAfter: (Int) -> Unit,
     onRemove: (Int) -> Unit,
     onMoveUp: (Int) -> Unit,
     onMoveDown: (Int) -> Unit
@@ -747,10 +794,15 @@ private fun CornerList(
     sheetFor?.takeIf { it in boundary.indices }?.let { index ->
         CornerActionsSheet(
             number = index + 1,
+            canInsert = boundary.size >= 2,
             onDismiss = { sheetFor = null },
             onEdit = {
                 sheetFor = null
                 onEdit(index)
+            },
+            onInsertAfter = {
+                sheetFor = null
+                onInsertAfter(index)
             },
             onRemove = {
                 sheetFor = null
@@ -785,8 +837,10 @@ private fun CornerAction(
 @Composable
 private fun CornerActionsSheet(
     number: Int,
+    canInsert: Boolean,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
+    onInsertAfter: () -> Unit,
     onRemove: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -806,6 +860,15 @@ private fun CornerActionsSheet(
                 label = stringResource(R.string.corner_sheet_edit),
                 onClick = onEdit
             )
+            // Needs a side to sit in the middle of, so it appears from the second
+            // corner onwards. Appending is what the button above the list is for.
+            if (canInsert) {
+                SheetAction(
+                    icon = Icons.Outlined.AddLocationAlt,
+                    label = stringResource(R.string.corner_sheet_insert, number + 1),
+                    onClick = onInsertAfter
+                )
+            }
             SheetAction(
                 icon = Icons.Outlined.Delete,
                 label = stringResource(R.string.corner_sheet_delete),
@@ -850,6 +913,7 @@ private fun SheetAction(
 @Composable
 private fun CornerCoordinateDialog(
     number: Int?,
+    inserting: Boolean,
     initial: GeoPoint?,
     onDismiss: () -> Unit,
     onConfirm: (String, String) -> Int?
@@ -866,8 +930,11 @@ private fun CornerCoordinateDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                if (number == null) stringResource(R.string.corner_dialog_title_add)
-                else stringResource(R.string.corner_dialog_title_edit, number)
+                when {
+                    number == null -> stringResource(R.string.corner_dialog_title_add)
+                    inserting -> stringResource(R.string.corner_dialog_title_insert, number)
+                    else -> stringResource(R.string.corner_dialog_title_edit, number)
+                }
             )
         },
         text = {

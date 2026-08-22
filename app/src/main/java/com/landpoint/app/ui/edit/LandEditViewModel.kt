@@ -525,6 +525,26 @@ class LandEditViewModel(
         return null
     }
 
+    /**
+     * Types a corner into the middle of the ring rather than onto the end.
+     *
+     * [index] is where it lands, so `1` puts it between corner #1 and corner #2.
+     * Appending and then pressing move-up until it arrives is the same edit, and
+     * on a seven-corner parcel it is five presses that each redraw the outline
+     * into a shape the user never meant.
+     */
+    @StringRes
+    fun insertBoundaryPointManual(index: Int, latitude: String, longitude: String): Int? {
+        if (boundaryEditsBlocked()) return R.string.error_corner_busy
+        val point = BoundaryEdits.parseLatLon(latitude, longitude)
+            ?: return R.string.error_corner_invalid
+        if (!BoundaryEdits.isDistinct(_uiState.value.boundary, point)) {
+            return R.string.error_corner_duplicate
+        }
+        _uiState.update { it.copy(boundary = BoundaryEdits.insertAt(it.boundary, index, point)) }
+        return null
+    }
+
     fun removeBoundaryPoint(index: Int) {
         if (boundaryEditsBlocked()) return
         _uiState.update { it.copy(boundary = BoundaryEdits.removeAt(it.boundary, index)) }
@@ -613,13 +633,37 @@ class LandEditViewModel(
         }
     }
 
-    fun addDraftCornerAt(latitude: Double, longitude: Double) {
+    /**
+     * Turns a tap into a corner — appended, or slotted into the side it landed on.
+     *
+     * [edgeToleranceM] is a fingertip's width converted to ground distance at the
+     * current zoom, and it is the whole of the gesture: tap an outline where a
+     * corner is missing and the corner appears *there*, in sequence, instead of
+     * at the end of the ring where it would draw a spike across the parcel. A tap
+     * away from the outline still appends, which is what drawing a fresh shape
+     * needs.
+     */
+    fun addDraftCornerAt(latitude: Double, longitude: Double, edgeToleranceM: Double = 0.0) {
         val candidate = GeoPoint(latitude, longitude)
         _uiState.update { state ->
-            if (!CornerDraft.acceptTap(state.draftPoints, candidate)) {
+            val points = state.draftPoints
+            if (!CornerDraft.acceptTap(points, candidate)) {
                 state.copy(message = strings.get(R.string.msg_corner_too_close))
             } else {
-                state.copy(draftBoundary = state.draftBoundary + DraftCorner(newCornerId(), candidate))
+                val at = BoundaryEdits.edgeNear(points, candidate, edgeToleranceM)
+                val corner = DraftCorner(newCornerId(), candidate)
+                if (at == null || at > state.draftBoundary.size) {
+                    state.copy(draftBoundary = state.draftBoundary + corner)
+                } else {
+                    state.copy(
+                        draftBoundary = state.draftBoundary.toMutableList()
+                            .apply { add(at, corner) },
+                        // Said out loud: a corner that quietly appeared as #3
+                        // rather than #7 is a renumbering the user has to be told
+                        // about, or the list below stops matching what they expect.
+                        message = strings.get(R.string.msg_corner_inserted, at + 1)
+                    )
+                }
             }
         }
     }
