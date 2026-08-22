@@ -29,6 +29,7 @@ import com.landpoint.app.util.AppStrings
 import com.landpoint.app.util.BoundaryEdits
 import com.landpoint.app.util.CornerDraft
 import com.landpoint.app.util.GeoPoint
+import com.landpoint.app.util.GeoUtils
 import com.landpoint.app.util.PolygonMath
 import org.osmdroid.mapsforge.MapsForgeTileSource
 import kotlinx.coroutines.Job
@@ -542,6 +543,36 @@ class LandEditViewModel(
             return R.string.error_corner_duplicate
         }
         _uiState.update { it.copy(boundary = BoundaryEdits.insertAt(it.boundary, index, point)) }
+        return null
+    }
+
+    /**
+     * Adds the corner a survey letter states as a bearing and a length from the
+     * corner before it, rather than as coordinates.
+     *
+     * This is how most of these boundaries are actually written down: one corner
+     * fixed, then each side as an azimuth and a distance. Typed in that form the
+     * figures go in as printed and the arithmetic is the app's problem, instead
+     * of the owner converting eight sides to coordinates by hand and having no
+     * way to find which one they got wrong.
+     *
+     * The new corner lands straight after [fromIndex], so measuring from the last
+     * corner continues the ring and measuring from a middle one splits its side.
+     */
+    @StringRes
+    fun insertBoundaryPointFromBearing(fromIndex: Int, bearing: String, distance: String): Int? {
+        if (boundaryEditsBlocked()) return R.string.error_corner_busy
+        val origin = _uiState.value.boundary.getOrNull(fromIndex)
+            ?: return R.string.error_corner_no_origin
+        val azimuth = BoundaryEdits.parseBearing(bearing) ?: return R.string.error_corner_bearing
+        val metres = BoundaryEdits.parseDistance(distance) ?: return R.string.error_corner_distance
+        val point = GeoUtils.destination(origin.latitude, origin.longitude, azimuth, metres)
+        if (!BoundaryEdits.isDistinct(_uiState.value.boundary, point)) {
+            return R.string.error_corner_duplicate
+        }
+        _uiState.update {
+            it.copy(boundary = BoundaryEdits.insertAt(it.boundary, fromIndex + 1, point))
+        }
         return null
     }
 

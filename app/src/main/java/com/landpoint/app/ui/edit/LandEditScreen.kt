@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.AddLocationAlt
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.EditLocationAlt
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.PhotoCamera
@@ -241,6 +242,7 @@ fun LandEditScreen(
                     onAddManual = viewModel::addBoundaryPointManual,
                     onUpdateCorner = viewModel::updateBoundaryPoint,
                     onInsertCorner = viewModel::insertBoundaryPointManual,
+                    onAddFromBearing = viewModel::insertBoundaryPointFromBearing,
                     onRemoveCorner = viewModel::removeBoundaryPoint,
                     onMoveCornerUp = viewModel::moveBoundaryPointUp,
                     onMoveCornerDown = viewModel::moveBoundaryPointDown
@@ -494,6 +496,7 @@ private fun BoundarySection(
     onAddManual: (String, String) -> Int?,
     onUpdateCorner: (Int, String, String) -> Int?,
     onInsertCorner: (Int, String, String) -> Int?,
+    onAddFromBearing: (Int, String, String) -> Int?,
     onRemoveCorner: (Int) -> Unit,
     onMoveCornerUp: (Int) -> Unit,
     onMoveCornerDown: (Int) -> Unit
@@ -580,6 +583,28 @@ private fun BoundarySection(
             )
         }
 
+        // The same letters that print coordinates for one corner give every other
+        // side as a bearing and a length from the one before it. Needs a corner to
+        // measure from, so it appears once there is one.
+        if (state.boundary.isNotEmpty()) {
+            OutlinedButton(
+                onClick = {
+                    dialogTarget = CornerDialogTarget.Bearing(state.boundary.lastIndex)
+                },
+                enabled = !busy
+            ) {
+                Icon(
+                    Icons.Outlined.Explore,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    "  " + stringResource(R.string.boundary_add_bearing),
+                    style = MaterialTheme.typography.labelLarge
+                )
+            }
+        }
+
         WalkControls(state = state, onStartWalk = onStartWalk, onStopWalk = onStopWalk)
 
         if (state.boundary.isNotEmpty()) {
@@ -601,6 +626,7 @@ private fun BoundarySection(
                 // After corner #n means position n+1 in the ring, which is also
                 // the number the new corner will carry.
                 onInsertAfter = { index -> dialogTarget = CornerDialogTarget.Insert(index + 1) },
+                onMeasureFrom = { index -> dialogTarget = CornerDialogTarget.Bearing(index) },
                 onRemove = onRemoveCorner,
                 onMoveUp = onMoveCornerUp,
                 onMoveDown = onMoveCornerDown
@@ -644,8 +670,10 @@ private fun BoundarySection(
         }
     }
 
-    dialogTarget?.let { target ->
-        CornerCoordinateDialog(
+    when (val target = dialogTarget) {
+        null -> Unit
+
+        is CornerDialogTarget.Coordinates -> CornerCoordinateDialog(
             number = when (target) {
                 CornerDialogTarget.Append -> null
                 is CornerDialogTarget.Edit -> target.index + 1
@@ -672,19 +700,48 @@ private fun BoundarySection(
                 refusal
             }
         )
+
+        is CornerDialogTarget.Bearing -> {
+            val origin = state.boundary.getOrNull(target.fromIndex)
+            // Clear, or a walk rewriting the ring, can take the corner away from
+            // under an open dialog. The target is dropped rather than left stale,
+            // or the dialog would spring back the moment the ring grew to that
+            // length again.
+            LaunchedEffect(origin == null) { if (origin == null) dialogTarget = null }
+            if (origin != null) {
+                CornerBearingDialog(
+                    fromNumber = target.fromIndex + 1,
+                    newNumber = target.fromIndex + 2,
+                    origin = origin,
+                    onDismiss = { dialogTarget = null },
+                    onConfirm = { bearing, distance ->
+                        val refusal = onAddFromBearing(target.fromIndex, bearing, distance)
+                        if (refusal == null) dialogTarget = null
+                        refusal
+                    }
+                )
+            }
+        }
     }
 }
 
-/** What the coordinate dialog was opened for. */
+/** What a corner dialog was opened for. */
 private sealed interface CornerDialogTarget {
+
+    /** The three that are typed as a pair of coordinates, and share one dialog. */
+    sealed interface Coordinates : CornerDialogTarget
+
     /** Onto the end of the ring. */
-    data object Append : CornerDialogTarget
+    data object Append : Coordinates
 
     /** Correcting the corner already at [index]. */
-    data class Edit(val index: Int) : CornerDialogTarget
+    data class Edit(val index: Int) : Coordinates
 
     /** A new corner landing at [index], between two that already exist. */
-    data class Insert(val index: Int) : CornerDialogTarget
+    data class Insert(val index: Int) : Coordinates
+
+    /** A new corner stated as a bearing and a length from the one at [fromIndex]. */
+    data class Bearing(val fromIndex: Int) : CornerDialogTarget
 }
 
 /**
@@ -717,6 +774,7 @@ private fun CornerList(
     enabled: Boolean,
     onEdit: (Int) -> Unit,
     onInsertAfter: (Int) -> Unit,
+    onMeasureFrom: (Int) -> Unit,
     onRemove: (Int) -> Unit,
     onMoveUp: (Int) -> Unit,
     onMoveDown: (Int) -> Unit
@@ -804,6 +862,10 @@ private fun CornerList(
                 sheetFor = null
                 onInsertAfter(index)
             },
+            onMeasureFrom = {
+                sheetFor = null
+                onMeasureFrom(index)
+            },
             onRemove = {
                 sheetFor = null
                 onRemove(index)
@@ -841,6 +903,7 @@ private fun CornerActionsSheet(
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onInsertAfter: () -> Unit,
+    onMeasureFrom: () -> Unit,
     onRemove: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -869,6 +932,11 @@ private fun CornerActionsSheet(
                     onClick = onInsertAfter
                 )
             }
+            SheetAction(
+                icon = Icons.Outlined.Explore,
+                label = stringResource(R.string.corner_sheet_bearing),
+                onClick = onMeasureFrom
+            )
             SheetAction(
                 icon = Icons.Outlined.Delete,
                 label = stringResource(R.string.corner_sheet_delete),
@@ -974,6 +1042,101 @@ private fun CornerCoordinateDialog(
         },
         confirmButton = {
             TextButton(onClick = { error = onConfirm(latitude, longitude) }) {
+                Text(stringResource(R.string.action_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        }
+    )
+}
+
+/**
+ * Types the next corner the way a survey letter states it: a bearing and a
+ * length from a corner already recorded.
+ *
+ * The coordinate it works out is shown as the figures are typed, and that is the
+ * point of the dialog rather than a decoration. A bearing read off the wrong line
+ * of a letter gives a corner that looks entirely reasonable on its own; the
+ * mistake only becomes visible once the outline closes, by which time three more
+ * sides have been measured from it.
+ */
+@Composable
+private fun CornerBearingDialog(
+    fromNumber: Int,
+    newNumber: Int,
+    origin: GeoPoint,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Int?
+) {
+    var bearing by remember { mutableStateOf("") }
+    var distance by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<Int?>(null) }
+
+    val landing = BoundaryEdits.parseBearing(bearing)?.let { azimuth ->
+        BoundaryEdits.parseDistance(distance)?.let { metres ->
+            GeoUtils.destination(origin.latitude, origin.longitude, azimuth, metres)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(stringResource(R.string.corner_dialog_title_bearing, newNumber, fromNumber))
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = bearing,
+                    onValueChange = { bearing = it; error = null },
+                    label = { Text(stringResource(R.string.corner_dialog_bearing)) },
+                    singleLine = true,
+                    // Text rather than Decimal: the degree, minute and second
+                    // marks a letter prints are not on a numeric keypad, and this
+                    // field accepts them.
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = distance,
+                    onValueChange = { distance = it; error = null },
+                    label = { Text(stringResource(R.string.corner_dialog_distance)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Done
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    stringResource(R.string.corner_dialog_bearing_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                landing?.let { point ->
+                    Text(
+                        stringResource(
+                            R.string.corner_dialog_bearing_result,
+                            GeoUtils.formatDecimal(point.latitude, point.longitude)
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+                error?.let {
+                    Text(
+                        stringResource(it),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { error = onConfirm(bearing, distance) }) {
                 Text(stringResource(R.string.action_save))
             }
         },

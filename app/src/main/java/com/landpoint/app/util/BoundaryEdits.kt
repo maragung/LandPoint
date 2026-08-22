@@ -152,6 +152,53 @@ object BoundaryEdits {
     }
 
     /**
+     * Reads a bearing off a survey letter: degrees clockwise from north.
+     *
+     * Accepts a plain figure (`45`, `45.5`, and `45,5` for the comma half the
+     * world writes it with) and the degrees-minutes-seconds form those letters
+     * are actually printed in (`45°30'20"`, or `45 30 20`). Converting DMS to a
+     * decimal in your head, at a desk, over eight sides, is precisely where a
+     * boundary picks up an error that nobody can trace afterwards.
+     *
+     * Out of range is refused rather than wrapped: a bearing of 400 is a typo,
+     * and quietly reading it as 40 would draw a confident boundary in a direction
+     * the letter never said. 360 is allowed — it is north, written the long way,
+     * and letters do write it.
+     */
+    fun parseBearing(text: String): Double? {
+        // A minus sign here is not a bearing anyone writes down, and stripping it
+        // as a separator would turn -45 into a heading 90 degrees off.
+        if (text.contains('-')) return null
+        val parts = text.replace(',', '.')
+            .split(Regex("[^0-9.]+"))
+            .filter { it.isNotEmpty() }
+        if (parts.isEmpty() || parts.size > 3) return null
+        // A part that is there but unreadable — "45.5.5" — must refuse, not be
+        // treated as absent and defaulted away to zero.
+        val figures = parts.map { it.toDoubleOrNull() ?: return null }
+        val degrees = figures[0]
+        val minutes = figures.getOrElse(1) { 0.0 }
+        val seconds = figures.getOrElse(2) { 0.0 }
+        if (minutes >= 60.0 || seconds >= 60.0) return null
+        val bearing = degrees + minutes / 60.0 + seconds / 3600.0
+        if (bearing > 360.0) return null
+        return bearing % 360.0
+    }
+
+    /**
+     * Reads the length of one side, in metres.
+     *
+     * Refuses zero — a side of no length is the corner it started from — and
+     * refuses a figure too long to be a parcel boundary, which is what a slipped
+     * decimal point looks like and the mistake worth catching here.
+     */
+    fun parseDistance(text: String): Double? {
+        val value = text.trim().replace(',', '.').toDoubleOrNull() ?: return null
+        if (value <= 0.0 || value > MAX_SIDE_M) return null
+        return value
+    }
+
+    /**
      * How far [p] is from the line between [a] and [b], in metres.
      *
      * Flat-earth, on a projection centred on [a]: the distances being measured
@@ -182,4 +229,11 @@ object BoundaryEdits {
      * three-corner parcel reachable for appending.
      */
     private const val MAX_EDGE_REACH = 0.25
+
+    /**
+     * The longest single side [parseDistance] will accept, in metres. Fifty
+     * kilometres is past any parcel that gets registered and well short of what a
+     * misplaced decimal point produces.
+     */
+    private const val MAX_SIDE_M = 50_000.0
 }

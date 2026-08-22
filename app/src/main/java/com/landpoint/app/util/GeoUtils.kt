@@ -33,6 +33,39 @@ object GeoUtils {
     }
 
     /**
+     * The point [distanceM] metres from (lat1, lon1) along [bearingDeg].
+     *
+     * The other direction from [bearing] and [distance]: those read a boundary
+     * that is already recorded as coordinates, this writes one down from how a
+     * survey letter states it — each side as a bearing and a length from the
+     * previous corner, with no coordinates printed at all.
+     *
+     * Great-circle, on the same sphere as [distance], so a corner placed here and
+     * then measured back with those two comes out where it was put.
+     */
+    fun destination(lat1: Double, lon1: Double, bearingDeg: Double, distanceM: Double): GeoPoint {
+        val angular = distanceM / EARTH_RADIUS_M
+        val theta = Math.toRadians(bearingDeg)
+        val phi1 = Math.toRadians(lat1)
+        val lambda1 = Math.toRadians(lon1)
+        // Coerced against the rounding that puts this a hair outside asin's
+        // domain at the poles, where it would come back NaN.
+        val sinPhi2 = (sin(phi1) * cos(angular) + cos(phi1) * sin(angular) * cos(theta))
+            .coerceIn(-1.0, 1.0)
+        val phi2 = asin(sinPhi2)
+        val lambda2 = lambda1 + atan2(
+            sin(theta) * sin(angular) * cos(phi1),
+            cos(angular) - sin(phi1) * sinPhi2
+        )
+        return GeoPoint(
+            latitude = Math.toDegrees(phi2),
+            // Wrapped back into range, so a side crossing the antimeridian still
+            // yields a longitude a map can place.
+            longitude = (Math.toDegrees(lambda2) + 540.0) % 360.0 - 180.0
+        )
+    }
+
+    /**
      * Cardinal direction (N, NE, E, SE, S, SW, W, NW) from a bearing in degrees.
      */
     fun bearingToCardinal(bearing: Double): String {

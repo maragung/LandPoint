@@ -180,6 +180,102 @@ class BoundaryEditsTest {
         assertEquals(GeoPoint(-90.0, -180.0), BoundaryEdits.parseLatLon("-90", "-180"))
     }
 
+    // ---- parseBearing ------------------------------------------------------
+    //
+    // The figures here come off a survey letter by hand, so what matters is that
+    // both notations letters use are read, and that a mistyped one is refused
+    // rather than turned into a heading nobody asked for. A boundary drawn on a
+    // wrong bearing is self-consistent and closes neatly; there is no later step
+    // that catches it.
+
+    @Test
+    fun `a plain figure of degrees is read as it stands`() {
+        assertEquals(45.0, BoundaryEdits.parseBearing("45")!!, 1e-9)
+        assertEquals(45.5, BoundaryEdits.parseBearing("45.5")!!, 1e-9)
+        assertEquals(0.0, BoundaryEdits.parseBearing("0")!!, 1e-9)
+    }
+
+    @Test
+    fun `a comma is read as a decimal point, not as a separator`() {
+        // Half the world writes 45,5 for forty-five and a half. Splitting on the
+        // comma instead would read it as 45°5', which is a fifth of a degree out.
+        assertEquals(45.5, BoundaryEdits.parseBearing("45,5")!!, 1e-9)
+        assertEquals(12.5, BoundaryEdits.parseDistance("12,5")!!, 1e-9)
+    }
+
+    @Test
+    fun `degrees minutes and seconds are read as printed`() {
+        val expected = 45.0 + 30.0 / 60.0 + 20.0 / 3600.0
+        assertEquals(expected, BoundaryEdits.parseBearing("45°30'20\"")!!, 1e-9)
+        assertEquals(expected, BoundaryEdits.parseBearing("45 30 20")!!, 1e-9)
+        assertEquals(45.5, BoundaryEdits.parseBearing("45°30'")!!, 1e-9)
+    }
+
+    @Test
+    fun `a full turn is north, written the long way`() {
+        assertEquals(0.0, BoundaryEdits.parseBearing("360")!!, 1e-9)
+    }
+
+    @Test
+    fun `a bearing past a full turn is refused, not wrapped`() {
+        // 400 is a typo. Reading it as 40 would draw a confident side in a
+        // direction the letter never stated.
+        assertNull(BoundaryEdits.parseBearing("400"))
+        assertNull(BoundaryEdits.parseBearing("361"))
+    }
+
+    @Test
+    fun `a negative bearing is refused rather than read as its digits`() {
+        // The minus is stripped by the separator split, so -45 would come back as
+        // 45 — ninety degrees off what someone typing it meant.
+        assertNull(BoundaryEdits.parseBearing("-45"))
+    }
+
+    @Test
+    fun `minutes and seconds over sixty are refused`() {
+        assertNull(BoundaryEdits.parseBearing("45 61 00"))
+        assertNull(BoundaryEdits.parseBearing("45 30 75"))
+    }
+
+    @Test
+    fun `nothing readable is refused`() {
+        assertNull(BoundaryEdits.parseBearing(""))
+        assertNull(BoundaryEdits.parseBearing("   "))
+        assertNull(BoundaryEdits.parseBearing("north"))
+        // A part that is there but unreadable must refuse, not default to zero.
+        assertNull(BoundaryEdits.parseBearing("45.5.5"))
+        // More figures than a bearing has.
+        assertNull(BoundaryEdits.parseBearing("45 30 20 10"))
+    }
+
+    // ---- parseDistance -----------------------------------------------------
+
+    @Test
+    fun `a side length is read in metres`() {
+        assertEquals(12.5, BoundaryEdits.parseDistance("12.5")!!, 1e-9)
+        assertEquals(20.0, BoundaryEdits.parseDistance("  20  ")!!, 1e-9)
+    }
+
+    @Test
+    fun `a side of no length or a negative one is refused`() {
+        // Zero would place the new corner on top of the one it was measured from.
+        assertNull(BoundaryEdits.parseDistance("0"))
+        assertNull(BoundaryEdits.parseDistance("-5"))
+    }
+
+    @Test
+    fun `a side longer than any parcel is refused`() {
+        // What a slipped decimal point looks like: 250 m typed as 250000.
+        assertNull(BoundaryEdits.parseDistance("250000"))
+        assertEquals(49_000.0, BoundaryEdits.parseDistance("49000")!!, 1e-9)
+    }
+
+    @Test
+    fun `an unreadable length is refused`() {
+        assertNull(BoundaryEdits.parseDistance(""))
+        assertNull(BoundaryEdits.parseDistance("twenty"))
+    }
+
     // ---- edgeNear ----------------------------------------------------------
     //
     // This is the hit test behind tapping a boundary line to add a corner into
