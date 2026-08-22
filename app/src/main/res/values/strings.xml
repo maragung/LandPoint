@@ -37,6 +37,9 @@
     <string name="list_no_matches_body">Try a different search term.</string>
     <string name="card_navigate_to">Navigate to %1$s</string>
     <string name="list_search_clear">Clear search</string>
+    <!-- The empty half of a wide window, before a record has been chosen -->
+    <string name="pane_nothing_chosen_title">No land chosen</string>
+    <string name="pane_nothing_chosen_body">Pick a land from the list and it opens here, beside it.</string>
     <!-- Summary above the list: how many lands are shown, then their total area -->
     <plurals name="list_summary">
         <item quantity="one">%1$d land</item>

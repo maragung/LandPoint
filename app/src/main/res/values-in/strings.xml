@@ -37,6 +37,9 @@
     <string name="list_no_matches_body">Coba kata pencarian lain.</string>
     <string name="card_navigate_to">Navigasi ke %1$s</string>
     <string name="list_search_clear">Bersihkan pencarian</string>
+    <!-- Separuh layar yang masih kosong di jendela lebar, sebelum ada yang dipilih -->
+    <string name="pane_nothing_chosen_title">Belum ada tanah dipilih</string>
+    <string name="pane_nothing_chosen_body">Pilih satu tanah dari daftar, catatannya terbuka di sini, di sampingnya.</string>
     <!-- Ringkasan di atas daftar: berapa bidang yang tampil, lalu total luasnya -->
     <plurals name="list_summary">
         <item quantity="other">%1$d bidang</item>
