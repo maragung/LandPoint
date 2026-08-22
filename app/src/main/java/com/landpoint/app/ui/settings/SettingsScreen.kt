@@ -38,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -47,6 +48,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.landpoint.app.BuildConfig
 import com.landpoint.app.R
+import com.landpoint.app.ui.security.AppLockState
+import com.landpoint.app.ui.security.deviceCanAuthenticate
 import com.landpoint.app.data.MapKind
 import com.landpoint.app.data.SettingsRepository
 import com.landpoint.app.data.export.BackupManager
@@ -107,6 +110,11 @@ fun SettingsScreen(
     val importOfflineMap = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let(viewModel::importOfflineMap) }
+
+    // Asked once: enrolling a fingerprint or setting a PIN happens in system
+    // settings, and returning from there brings this screen back with it.
+    val context = LocalContext.current
+    val canLock = remember(context) { deviceCanAuthenticate(context) }
 
     LaunchedEffect(state.message) {
         state.message?.let {
@@ -211,6 +219,29 @@ fun SettingsScreen(
                     hint = stringResource(R.string.settings_strip_photo_location_hint),
                     checked = state.privacy.stripPhotoLocation,
                     onCheckedChange = viewModel::setStripPhotoLocation
+                )
+                SwitchRow(
+                    label = stringResource(R.string.settings_app_lock),
+                    hint = stringResource(
+                        if (canLock) R.string.settings_app_lock_hint
+                        else R.string.settings_app_lock_unavailable
+                    ),
+                    // A lock left on from a phone that has since had its screen
+                    // lock removed reads as off, because that is what it now is.
+                    checked = state.privacy.appLock && canLock,
+                    enabled = canLock,
+                    onCheckedChange = { on ->
+                        // Whoever switches this on is present by definition;
+                        // making them authenticate on the spot would be theatre.
+                        if (on) AppLockState.unlock()
+                        viewModel.setAppLock(on)
+                    }
+                )
+                SwitchRow(
+                    label = stringResource(R.string.settings_secure_screen),
+                    hint = stringResource(R.string.settings_secure_screen_hint),
+                    checked = state.privacy.secureScreen,
+                    onCheckedChange = viewModel::setSecureScreen
                 )
             }
 
@@ -467,6 +498,7 @@ private fun SwitchRow(
     label: String,
     hint: String,
     checked: Boolean,
+    enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
@@ -475,6 +507,7 @@ private fun SwitchRow(
             .fillMaxWidth()
             .toggleable(
                 value = checked,
+                enabled = enabled,
                 role = Role.Switch,
                 onValueChange = onCheckedChange
             )
@@ -491,7 +524,7 @@ private fun SwitchRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Switch(checked = checked, onCheckedChange = null)
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
 

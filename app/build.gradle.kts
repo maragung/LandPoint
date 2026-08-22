@@ -123,6 +123,9 @@ dependencies {
 
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.exifinterface)
+    // Fingerprint or screen-lock confirmation for the app lock. Pulls in
+    // androidx.fragment, which is why MainActivity is a FragmentActivity.
+    implementation(libs.androidx.biometric)
     implementation(libs.coil.compose)
     implementation(libs.osmdroid.android)
     // Renders vector .map files on the device. No tile server is involved, so an

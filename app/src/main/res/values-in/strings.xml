@@ -378,6 +378,16 @@
     <string name="settings_privacy_no_cloud">Data lahan dan foto tetap di HP ini. Tidak disalin ke backup cloud Google — pakai Backup di bawah untuk menyimpan salinan yang Anda kendalikan. HP baru tetap bisa menerima semuanya lewat transfer langsung antar-perangkat Android.</string>
     <string name="settings_strip_photo_location">Hapus lokasi foto saat dibagikan</string>
     <string name="settings_strip_photo_location_hint">Salinan yang dibagikan kehilangan tag GPS-nya. Koordinat yang tercetak di gambar tetap terbaca, dan foto yang tersimpan di sini tidak diubah.</string>
+    <string name="settings_app_lock">Kunci aplikasi</string>
+    <string name="settings_app_lock_hint">Minta sidik jari atau kunci layar setiap kali aplikasi dibuka.</string>
+    <string name="settings_app_lock_unavailable">Atur dulu kunci layar atau sidik jari di HP ini.</string>
+    <string name="settings_secure_screen">Cegah tangkapan layar</string>
+    <string name="settings_secure_screen_hint">Aplikasi tidak muncul di pratinjau aplikasi terkini, serta tangkapan dan rekaman layar dicegah.</string>
+    <string name="lock_title">LandPoint terkunci</string>
+    <string name="lock_message">Buka kunci untuk melihat data tanah Anda.</string>
+    <string name="lock_unlock">Buka kunci</string>
+    <string name="lock_prompt_title">Buka kunci LandPoint</string>
+    <string name="lock_prompt_subtitle">Data tanah Anda ada di balik kunci ini.</string>
     <string name="boundary_corner_tap_hint">Ketuk patok untuk mengubah atau menghapusnya.</string>
     <string name="corner_sheet_title">Patok %1$d</string>
     <string name="corner_sheet_edit">Ubah koordinat</string>

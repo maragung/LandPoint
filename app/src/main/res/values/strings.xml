@@ -394,6 +394,16 @@
     <string name="settings_privacy_no_cloud">Land records and photos stay on this phone. They are not copied into Google cloud backup — use Backup below to keep a copy you control. A new phone can still receive everything through Android\'s device-to-device transfer.</string>
     <string name="settings_strip_photo_location">Remove photo location when sharing</string>
     <string name="settings_strip_photo_location_hint">Shared copies lose their GPS tags. The coordinates stamped onto the picture stay readable, and the photo stored here is untouched.</string>
+    <string name="settings_app_lock">Lock the app</string>
+    <string name="settings_app_lock_hint">Ask for a fingerprint or the screen lock each time the app is opened.</string>
+    <string name="settings_app_lock_unavailable">Set a screen lock or fingerprint on this phone first.</string>
+    <string name="settings_secure_screen">Block screenshots</string>
+    <string name="settings_secure_screen_hint">Keeps the app out of the recent-apps preview and stops screenshots and screen recording.</string>
+    <string name="lock_title">LandPoint is locked</string>
+    <string name="lock_message">Unlock to see your land records.</string>
+    <string name="lock_unlock">Unlock</string>
+    <string name="lock_prompt_title">Unlock LandPoint</string>
+    <string name="lock_prompt_subtitle">Your land records are behind this lock.</string>
     <string name="boundary_corner_tap_hint">Tap a corner to change or delete it.</string>
     <string name="corner_sheet_title">Corner %1$d</string>
     <string name="corner_sheet_edit">Change coordinates</string>
