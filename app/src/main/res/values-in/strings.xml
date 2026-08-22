@@ -386,6 +386,8 @@
     <string name="pdf_count_exported">%1$d lokasi · diekspor %2$s</string>
     <string name="pdf_footer_page">Dibuat oleh LandPoint · halaman %1$d</string>
     <string name="pdf_footer_disclaimer">Hanya untuk catatan pribadi — bukan dokumen pengukuran resmi.</string>
+    <string name="pdf_sketch_label">Sketsa</string>
+    <string name="pdf_sketch_scale">%1$s m</string>
 
 
     <!-- Privasi dan keamanan -->

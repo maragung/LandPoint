@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
@@ -14,6 +15,8 @@ import com.landpoint.app.data.SettingsRepository
 import com.landpoint.app.data.model.Land
 import com.landpoint.app.util.AppStrings
 import com.landpoint.app.util.AreaFormat
+import com.landpoint.app.util.BoundarySketch
+import com.landpoint.app.util.GeoPoint
 import com.landpoint.app.util.GeoUtils
 import com.landpoint.app.util.PolygonMath
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +42,18 @@ class PdfExporter(
         const val MARGIN = 48f
         const val LINE = 18f
         const val ACCENT = 0xFF1F6F4A.toInt()
+        // Matched to the photo block below it, so a record with both reads as
+        // two panels of one report rather than two unrelated pictures.
+        const val SKETCH_WIDTH = 220f
+        const val SKETCH_HEIGHT = 150f
+        /** Reserved along the bottom of the box for the scale bar. */
+        const val SKETCH_BAR_STRIP = 14f
+        /**
+         * Above this many corners the numbers are drawn no longer: a walked
+         * track of hundreds of points would be a ring of unreadable digits, and
+         * the outline is the useful part of it.
+         */
+        const val SKETCH_MAX_NUMBERED = 24
     }
 
     private val dateFormat = SimpleDateFormat("d MMM yyyy, HH:mm", Locale.getDefault())
@@ -72,6 +87,35 @@ class PdfExporter(
     private val footerPaint = Paint().apply {
         color = Color.parseColor("#888888")
         textSize = 9f
+        isAntiAlias = true
+    }
+    // Alpha is set after the colour, not folded into it: the setter replaces the
+    // alpha channel of whatever colour is already there, so the order matters.
+    private val sketchFillPaint = Paint().apply {
+        color = ACCENT
+        alpha = 38
+        style = Paint.Style.FILL
+        isAntiAlias = true
+    }
+    private val sketchLinePaint = Paint().apply {
+        color = ACCENT
+        style = Paint.Style.STROKE
+        strokeWidth = 1.2f
+        isAntiAlias = true
+    }
+    private val sketchCornerPaint = Paint().apply {
+        color = ACCENT
+        style = Paint.Style.FILL
+        isAntiAlias = true
+    }
+    private val sketchFramePaint = Paint().apply {
+        color = Color.parseColor("#DDDDDD")
+        style = Paint.Style.STROKE
+        strokeWidth = 1f
+    }
+    private val sketchLabelPaint = Paint().apply {
+        color = Color.parseColor("#444444")
+        textSize = 7f
         isAntiAlias = true
     }
 
@@ -241,6 +285,7 @@ class PdfExporter(
                         PolygonMath.perimeterM(ring).roundToInt()
                     )
                 )
+                drawSketch(ring)
             }
             field(strings.get(R.string.label_saved), dateFormat.format(Date(land.createdAt)))
             if (land.description.isNotBlank()) {
@@ -267,6 +312,92 @@ class PdfExporter(
                 if (i < wrapped.lastIndex) y += LINE - 4f
             }
             y += LINE - 2f
+        }
+
+        /**
+         * The outline itself, to scale, north up.
+         *
+         * A page that states an area and a perimeter but not a shape can describe
+         * two quite different parcels, and the reader has no way to tell which one
+         * was measured. Drawn small and beside the figures rather than given a page
+         * of its own: this is a report to be checked against a certificate, not a
+         * survey drawing to be worked from.
+         */
+        private fun drawSketch(ring: List<GeoPoint>) {
+            val sketch = BoundarySketch.of(
+                ring,
+                SKETCH_WIDTH,
+                SKETCH_HEIGHT - SKETCH_BAR_STRIP
+            ) ?: return
+            ensureSpace(SKETCH_HEIGHT + 12f)
+            val c = canvas ?: return
+            y += 6f
+            val left = MARGIN + 110f
+            val top = y
+            c.drawText(strings.get(R.string.pdf_sketch_label), MARGIN, top + 10f, labelPaint)
+            c.drawRect(left, top, left + SKETCH_WIDTH, top + SKETCH_HEIGHT, sketchFramePaint)
+
+            val path = Path()
+            sketch.outline.forEachIndexed { i, point ->
+                val px = left + point.x
+                val py = top + point.y
+                if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
+            }
+            path.close()
+            c.drawPath(path, sketchFillPaint)
+            c.drawPath(path, sketchLinePaint)
+
+            if (sketch.outline.size <= SKETCH_MAX_NUMBERED) {
+                sketch.outline.forEachIndexed { i, point ->
+                    val px = left + point.x
+                    val py = top + point.y
+                    c.drawCircle(px, py, 1.8f, sketchCornerPaint)
+                    // Offset up and to the right of its corner, the way corners are
+                    // numbered on a survey letter.
+                    c.drawText("${i + 1}", px + 3f, py - 3f, sketchLabelPaint)
+                }
+            }
+
+            drawNorthArrow(c, left + SKETCH_WIDTH - 12f, top + 6f)
+            drawScaleBar(c, left + 6f, top + SKETCH_HEIGHT - 6f, sketch.metresPerPoint)
+            y += SKETCH_HEIGHT + 6f
+        }
+
+        /** So the sheet can be turned to face the ground it describes. */
+        private fun drawNorthArrow(c: Canvas, x: Float, top: Float) {
+            c.drawLine(x, top + 14f, x, top + 2f, sketchLinePaint)
+            c.drawLine(x, top + 2f, x - 3f, top + 6f, sketchLinePaint)
+            c.drawLine(x, top + 2f, x + 3f, top + 6f, sketchLinePaint)
+            val north = strings.array(R.array.cardinal_directions).firstOrNull() ?: "N"
+            c.drawText(
+                north,
+                x - sketchLabelPaint.measureText(north) / 2f,
+                top + 22f,
+                sketchLabelPaint
+            )
+        }
+
+        /**
+         * What the drawing measures, without which it is only a picture.
+         *
+         * Aimed at about two-fifths of the box so the bar stays clear of the
+         * outline's own width, then rounded down to a length a reader can step
+         * along by eye.
+         */
+        private fun drawScaleBar(c: Canvas, x: Float, baseline: Float, metresPerPoint: Double) {
+            val metres = BoundarySketch.niceBarMetres(metresPerPoint * SKETCH_WIDTH * 0.4)
+            if (metres <= 0.0) return
+            val length = (metres / metresPerPoint).toFloat()
+            if (!length.isFinite() || length <= 0f) return
+            c.drawLine(x, baseline, x + length, baseline, sketchLinePaint)
+            c.drawLine(x, baseline - 3f, x, baseline + 3f, sketchLinePaint)
+            c.drawLine(x + length, baseline - 3f, x + length, baseline + 3f, sketchLinePaint)
+            val label = strings.get(
+                R.string.pdf_sketch_scale,
+                if (metres >= 1.0) metres.roundToInt().toString()
+                else "%.1f".format(Locale.getDefault(), metres)
+            )
+            c.drawText(label, x, baseline - 5f, sketchLabelPaint)
         }
 
         private fun drawPhoto(path: String) {
