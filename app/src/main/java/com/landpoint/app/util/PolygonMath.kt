@@ -143,6 +143,45 @@ object PolygonMath {
         return total
     }
 
+    /** One side of a boundary, stated the way a survey letter states it. */
+    data class Side(val toIndex: Int, val lengthM: Double, val bearingDeg: Double)
+
+    /**
+     * The side leaving corner [index], or null when that corner starts no side.
+     *
+     * A survey letter does not print coordinates; it prints, for each corner in
+     * turn, a bearing and a length to the next one. Reading those back out is how
+     * someone checks that what they typed is the parcel on the paper — a corner
+     * whose digits are transposed is invisible as a coordinate and obvious as a
+     * side of 214 metres between two pegs 21 metres apart.
+     *
+     * [toIndex] is returned rather than left to the caller to work out, because
+     * which corner comes next is exactly the part that is not obvious: the last
+     * one joins back to the first, and only once the outline has closed.
+     */
+    fun sideFrom(points: List<GeoPoint>, index: Int): Side? {
+        if (index !in points.indices) return null
+        val to = when {
+            index < points.size - 1 -> index + 1
+            // Two corners are a line, and its one side has already been reported
+            // from the first of them. Closing it would name the same side twice
+            // and read as a boundary with two.
+            points.size >= 3 -> 0
+            else -> return null
+        }
+        val from = points[index]
+        val next = points[to]
+        return Side(
+            toIndex = to,
+            lengthM = GeoUtils.distance(
+                from.latitude, from.longitude, next.latitude, next.longitude
+            ),
+            bearingDeg = GeoUtils.bearing(
+                from.latitude, from.longitude, next.latitude, next.longitude
+            )
+        )
+    }
+
     /** Length of the open path as walked so far — what to show mid-capture. */
     fun pathLengthM(points: List<GeoPoint>): Double {
         if (points.size < 2) return 0.0

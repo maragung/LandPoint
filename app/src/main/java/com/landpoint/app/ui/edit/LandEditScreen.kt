@@ -72,6 +72,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
@@ -88,6 +89,7 @@ import com.landpoint.app.util.AreaFormat
 import com.landpoint.app.util.BoundaryEdits
 import com.landpoint.app.util.GeoPoint
 import com.landpoint.app.util.GeoUtils
+import com.landpoint.app.util.PolygonMath
 import java.io.File
 import kotlin.math.roundToInt
 
@@ -782,6 +784,27 @@ private fun GeoPoint.rounded(): GeoPoint = GeoPoint(
 )
 
 /**
+ * Metres to one decimal, at any length.
+ *
+ * [GeoUtils.formatDistance] rounds to whole metres and turns into kilometres past
+ * a thousand, which is right for "how far away is this land" and wrong for a
+ * side: the figure it is being checked against was printed to the centimetre, and
+ * a flat "20 m" says nothing about whether the 20.35 went in correctly.
+ */
+private fun formatSideLength(metres: Double): String =
+    "%.1f".format(java.util.Locale.getDefault(), metres)
+
+/**
+ * Three digits, the way a bearing is written on a survey letter, so 45° reads as
+ * 045 and lines up under 137 in the column above it.
+ *
+ * Taken modulo 360 after rounding, because 359.7 rounds to a 360 that no compass
+ * shows.
+ */
+private fun formatBearing(degrees: Double): String =
+    "%03d".format(degrees.roundToInt() % 360)
+
+/**
  * The corners in the order they are joined up, each one editable.
  *
  * The numbers are not decoration: the order *is* the outline, so a boundary that
@@ -805,6 +828,7 @@ private fun CornerList(
 ) {
     var expanded by remember { mutableStateOf(false) }
     var sheetFor by remember { mutableStateOf<Int?>(null) }
+    val cardinals = stringArrayResource(R.array.cardinal_directions)
     val collapsedCount = 10
     val shown = if (expanded) boundary.size else minOf(boundary.size, collapsedCount)
 
@@ -834,18 +858,38 @@ private fun CornerList(
                     .clip(RoundedCornerShape(8.dp))
                     .clickable(enabled = enabled) { sheetFor = index }
             ) {
-                Text(
-                    stringResource(
-                        R.string.boundary_corner_number,
-                        index + 1,
-                        GeoUtils.formatDecimal(point.latitude, point.longitude)
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
+                Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(start = 4.dp)
-                )
+                        .padding(start = 4.dp, top = 4.dp, bottom = 4.dp)
+                ) {
+                    Text(
+                        stringResource(
+                            R.string.boundary_corner_number,
+                            index + 1,
+                            GeoUtils.formatDecimal(point.latitude, point.longitude)
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    // Under the corner it leaves, not gathered into a table of
+                    // its own, because that is the order the paper is written in:
+                    // from this peg, this far, this way, to the next one.
+                    PolygonMath.sideFrom(boundary, index)?.let { side ->
+                        Text(
+                            stringResource(
+                                R.string.boundary_side_next,
+                                side.toIndex + 1,
+                                formatSideLength(side.lengthM),
+                                formatBearing(side.bearingDeg),
+                                cardinals[GeoUtils.cardinalIndex(side.bearingDeg)]
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
                 CornerAction(
                     icon = Icons.Default.ArrowUpward,
                     description = stringResource(R.string.boundary_corner_up, index + 1),

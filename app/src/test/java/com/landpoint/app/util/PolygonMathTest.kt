@@ -100,6 +100,65 @@ class PolygonMathTest {
         assertNull(PolygonMath.selfCrossing(flat))
     }
 
+    // ---- sideFrom ----------------------------------------------------------
+    //
+    // What a survey letter actually prints: per corner, a bearing and a length to
+    // the next one. These are the figures someone reads back to find out whether
+    // what they typed is the parcel on the paper.
+
+    @Test
+    fun `each side of a square reads back its own length and heading`() {
+        val corners = square(20.0)
+        val expected = listOf(1 to 0.0, 2 to 90.0, 3 to 180.0, 0 to 270.0)
+        expected.forEachIndexed { index, (toIndex, bearing) ->
+            val side = PolygonMath.sideFrom(corners, index)!!
+            assertEquals("corner $index joins the wrong one", toIndex, side.toIndex)
+            assertEquals("side leaving corner $index", 20.0, side.lengthM, 0.2)
+            assertEquals("bearing leaving corner $index", bearing, side.bearingDeg, 0.5)
+        }
+    }
+
+    @Test
+    fun `the last corner of a closed outline runs back to the first`() {
+        val triangle = listOf(at(0.0, 0.0), at(20.0, 0.0), at(0.0, 20.0))
+        assertEquals(0, PolygonMath.sideFrom(triangle, 2)!!.toIndex)
+    }
+
+    @Test
+    fun `two corners are one side, not two`() {
+        // Closing a line would name the same side a second time, and read as a
+        // boundary with two of them.
+        val line = listOf(at(0.0, 0.0), at(0.0, 15.0))
+        assertEquals(15.0, PolygonMath.sideFrom(line, 0)!!.lengthM, 0.2)
+        assertNull(PolygonMath.sideFrom(line, 1))
+    }
+
+    @Test
+    fun `a lone corner starts no side`() {
+        assertNull(PolygonMath.sideFrom(listOf(GeoPoint(lat, lon)), 0))
+    }
+
+    @Test
+    fun `a corner that is not there gives nothing rather than throwing`() {
+        val corners = square(20.0)
+        assertNull(PolygonMath.sideFrom(corners, 4))
+        assertNull(PolygonMath.sideFrom(corners, -1))
+        assertNull(PolygonMath.sideFrom(emptyList(), 0))
+    }
+
+    @Test
+    fun `a mistyped corner shows up as a side that cannot be right`() {
+        // A 20 m square, except the third corner went in 200 m north instead of
+        // 20 — one digit. As a coordinate it sits in the list looking like all the
+        // others; as a side it is 181 m where 20 belongs, heading almost due north
+        // where the square turns east. That is the whole reason these figures are
+        // on screen.
+        val mistyped = listOf(at(0.0, 0.0), at(20.0, 0.0), at(200.0, 20.0), at(0.0, 20.0))
+        val side = PolygonMath.sideFrom(mistyped, 1)!!
+        assertEquals(180.9, side.lengthM, 0.5)
+        assertEquals(6.3, side.bearingDeg, 0.5)
+    }
+
     @Test
     fun `fewer than three points has no area`() {
         assertEquals(0.0, PolygonMath.areaSqm(emptyList()), 0.0)

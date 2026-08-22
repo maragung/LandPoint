@@ -140,6 +140,7 @@
     <string name="boundary_add_manual">Tambah dari koordinat</string>
     <string name="boundary_corners_title">Koordinat sudut</string>
     <string name="boundary_corner_number">#%1$d  %2$s</string>
+    <string name="boundary_side_next">→ #%1$d  %2$s m  %3$s° %4$s</string>
     <string name="boundary_corner_edit">Ubah sudut %1$d</string>
     <string name="boundary_corner_delete">Hapus sudut %1$d</string>
     <string name="boundary_corner_up">Pindahkan sudut %1$d ke atas</string>
