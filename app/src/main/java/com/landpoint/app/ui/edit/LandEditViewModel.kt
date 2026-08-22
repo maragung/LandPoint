@@ -372,7 +372,7 @@ class LandEditViewModel(
                         message = strings.get(R.string.msg_no_fix)
                     )
                 } else {
-                    val candidate = GeoPoint(fix.latitude, fix.longitude)
+                    val candidate = GeoPoint(fix.latitude, fix.longitude, fix.accuracy)
                     val previous = state.boundary.lastOrNull()
                     if (!PolygonMath.isMeaningfulStep(previous, candidate, fix.accuracy)) {
                         // Too close to the last corner to be a distinct one — most
@@ -449,7 +449,11 @@ class LandEditViewModel(
                         timestamp = location.timestamp
                     )
                     if (!WalkTrack.accept(track.lastOrNull(), sample)) return@collect
-                    track += GeoPoint(sample.latitude, sample.longitude)
+                    track += GeoPoint(
+                        sample.latitude,
+                        sample.longitude,
+                        sample.accuracy?.toDouble()
+                    )
                     val progress = WalkTrack.progressOf(track)
                     _uiState.update {
                         it.copy(
@@ -821,7 +825,7 @@ class LandEditViewModel(
                     message = strings.get(R.string.msg_no_fix)
                 )
                 else {
-                    val candidate = GeoPoint(fix.latitude, fix.longitude)
+                    val candidate = GeoPoint(fix.latitude, fix.longitude, fix.accuracy)
                     val previous = state.draftBoundary.lastOrNull()?.point
                     if (!PolygonMath.isMeaningfulStep(previous, candidate, fix.accuracy)) {
                         state.copy(

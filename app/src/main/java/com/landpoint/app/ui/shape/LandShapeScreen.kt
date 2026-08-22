@@ -88,12 +88,18 @@ fun LandShapeScreen(
     // Resolved up here: the overlay block below is not composable, and building
     // these inside it would re-read the resources on every pan.
     val cornerTitles = state.boundary.mapIndexed { index, point ->
-        stringResource(
+        val coordinates = stringResource(
             R.string.boundary_corner_number,
             index + 1,
             if (state.dms) GeoUtils.formatDMS(point.latitude, point.longitude)
             else GeoUtils.formatDecimal(point.latitude, point.longitude)
         )
+        // Tapping a corner here is someone asking what this corner is; how well
+        // it was known is part of the answer.
+        val accuracy = point.accuracyM?.let {
+            stringResource(R.string.boundary_corner_accuracy, GeoUtils.formatAccuracy(it))
+        }
+        if (accuracy == null) coordinates else "$coordinates  $accuracy"
     }
     val attribution = stringResource(R.string.map_attribution_osm)
 

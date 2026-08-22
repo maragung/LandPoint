@@ -863,12 +863,24 @@ private fun CornerList(
                         .weight(1f)
                         .padding(start = 4.dp, top = 4.dp, bottom = 4.dp)
                 ) {
-                    Text(
+                    val coordinates = stringResource(
+                        R.string.boundary_corner_number,
+                        index + 1,
+                        GeoUtils.formatDecimal(point.latitude, point.longitude)
+                    )
+                    // The accuracy of the fix it came from, where it came from
+                    // one. Beside the coordinates rather than tucked out of sight,
+                    // because a corner taken at ±30 m under tree cover is the
+                    // reason two boundaries disagree, and nothing else on this
+                    // screen would say so.
+                    val accuracy = point.accuracyM?.let {
                         stringResource(
-                            R.string.boundary_corner_number,
-                            index + 1,
-                            GeoUtils.formatDecimal(point.latitude, point.longitude)
-                        ),
+                            R.string.boundary_corner_accuracy,
+                            GeoUtils.formatAccuracy(it)
+                        )
+                    }
+                    Text(
+                        if (accuracy == null) coordinates else "$coordinates  $accuracy",
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace
                     )

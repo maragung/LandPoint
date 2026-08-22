@@ -110,6 +110,17 @@ object GeoUtils {
     }
 
     /**
+     * A GPS accuracy figure, in whole metres.
+     *
+     * Rounded rather than shown to a decimal because it is an estimated radius,
+     * not a measurement, and "±3.4 m" claims a precision the figure does not
+     * have. Below a metre it prints as "<1" instead of rounding to a nought no
+     * receiver would mean.
+     */
+    fun formatAccuracy(metres: Double): String =
+        if (metres < 1.0) "<1" else metres.roundToInt().toString()
+
+    /**
      * Format coordinates as decimal degrees (e.g. 37.7749, -122.4194)
      */
     fun formatDecimal(lat: Double, lon: Double): String =

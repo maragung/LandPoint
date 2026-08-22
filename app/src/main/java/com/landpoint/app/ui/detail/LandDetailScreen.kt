@@ -540,13 +540,20 @@ private fun CornerCoordinates(boundary: List<GeoPoint>, dms: Boolean) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         shown.forEachIndexed { index, point ->
+            val coordinates = stringResource(
+                R.string.boundary_corner_number,
+                index + 1,
+                if (dms) GeoUtils.formatDMS(point.latitude, point.longitude)
+                else GeoUtils.formatDecimal(point.latitude, point.longitude)
+            )
+            // How well the corner was known when it was taken. On a record being
+            // read back — or shown to someone else — that is part of what the
+            // coordinates mean.
+            val accuracy = point.accuracyM?.let {
+                stringResource(R.string.boundary_corner_accuracy, GeoUtils.formatAccuracy(it))
+            }
             Text(
-                stringResource(
-                    R.string.boundary_corner_number,
-                    index + 1,
-                    if (dms) GeoUtils.formatDMS(point.latitude, point.longitude)
-                    else GeoUtils.formatDecimal(point.latitude, point.longitude)
-                ),
+                if (accuracy == null) coordinates else "$coordinates  $accuracy",
                 style = MaterialTheme.typography.bodyMedium,
                 fontFamily = FontFamily.Monospace
             )

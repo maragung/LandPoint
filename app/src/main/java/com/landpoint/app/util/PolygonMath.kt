@@ -7,10 +7,19 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.tan
 
-/** One corner of a boundary. Kept minimal — this is what gets serialised. */
+/**
+ * One corner of a boundary. Kept minimal — this is what gets serialised.
+ *
+ * [accuracyM] is the accuracy in metres of the GPS fix this corner was taken
+ * from, or null for one that was typed in, tapped on the map or derived, and so
+ * has no such figure to report. It rides on the corner rather than in a list
+ * beside it because corners get inserted, deleted and reordered constantly, and
+ * two parallel lists would drift apart on the first of those.
+ */
 data class GeoPoint(
     val latitude: Double,
-    val longitude: Double
+    val longitude: Double,
+    val accuracyM: Double? = null
 )
 
 /**
@@ -245,5 +254,5 @@ object PolygonMath {
         return moved >= maxOf(2.0, accuracyM)
     }
 
-    fun GeoSample.toGeoPoint() = GeoPoint(latitude, longitude)
+    fun GeoSample.toGeoPoint() = GeoPoint(latitude, longitude, accuracy?.toDouble())
 }
