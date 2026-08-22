@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -32,6 +34,7 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.outlined.AddLocationAlt
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.EditLocationAlt
@@ -44,6 +47,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -248,7 +252,9 @@ fun LandEditScreen(
                     onAddFromBearing = viewModel::insertBoundaryPointFromBearing,
                     onRemoveCorner = viewModel::removeBoundaryPoint,
                     onMoveCornerUp = viewModel::moveBoundaryPointUp,
-                    onMoveCornerDown = viewModel::moveBoundaryPointDown
+                    onMoveCornerDown = viewModel::moveBoundaryPointDown,
+                    onLoadNeighbours = viewModel::loadNeighbours,
+                    onTakeFromNeighbour = viewModel::appendFromNeighbour
                 )
             }
 
@@ -502,7 +508,9 @@ private fun BoundarySection(
     onAddFromBearing: (Int, String, String) -> Int?,
     onRemoveCorner: (Int) -> Unit,
     onMoveCornerUp: (Int) -> Unit,
-    onMoveCornerDown: (Int) -> Unit
+    onMoveCornerDown: (Int) -> Unit,
+    onLoadNeighbours: () -> Unit,
+    onTakeFromNeighbour: (String, Set<Int>) -> Unit
 ) {
     val areaUnit = state.areaUnit
     // While a walk records, every other boundary control edits a shape that is
@@ -510,6 +518,7 @@ private fun BoundarySection(
     val busy = state.isCapturingCorner || state.isWalking
 
     var dialogTarget by remember { mutableStateOf<CornerDialogTarget?>(null) }
+    var neighbourSheet by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.boundary_title), style = MaterialTheme.typography.titleSmall)
@@ -608,6 +617,28 @@ private fun BoundarySection(
             }
         }
 
+        // Where two parcels meet, the corners between them are the same pegs in
+        // the ground. Measuring them twice puts a sliver of no-man's land or an
+        // overlap between the two records, and it is the overlap that turns into
+        // an argument years later.
+        OutlinedButton(
+            onClick = {
+                onLoadNeighbours()
+                neighbourSheet = true
+            },
+            enabled = !busy
+        ) {
+            Icon(
+                Icons.Outlined.ContentCopy,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                "  " + stringResource(R.string.boundary_from_neighbour),
+                style = MaterialTheme.typography.labelLarge
+            )
+        }
+
         WalkControls(state = state, onStartWalk = onStartWalk, onStopWalk = onStopWalk)
 
         if (state.boundary.isNotEmpty()) {
@@ -694,6 +725,14 @@ private fun BoundarySection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+
+    if (neighbourSheet) {
+        NeighbourSheet(
+            state = state,
+            onDismiss = { neighbourSheet = false },
+            onTake = onTakeFromNeighbour
+        )
     }
 
     when (val target = dialogTarget) {
@@ -1048,6 +1087,233 @@ private fun SheetAction(
     ) {
         Icon(icon, contentDescription = null, tint = colour)
         Text(label, style = MaterialTheme.typography.bodyLarge, color = colour)
+    }
+}
+
+/**
+ * Corners taken from a saved land next door, in two steps: which land, then
+ * which of its corners are shared.
+ *
+ * Two steps rather than one list because these are two different questions. The
+ * first is answered by name and distance; the second by reading coordinates. One
+ * flat list of every corner of every land would ask both at once and answer
+ * neither.
+ *
+ * The corners come across exactly as they were recorded, accuracy figure and all:
+ * it is the same peg, so it is the same reading, and copying it is the whole point
+ * — a second measurement of the same corner is what leaves a gap between the two
+ * parcels.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NeighbourSheet(
+    state: LandEditUiState,
+    onDismiss: () -> Unit,
+    onTake: (String, Set<Int>) -> Unit
+) {
+    var chosenId by remember { mutableStateOf<String?>(null) }
+    var ticked by remember { mutableStateOf(emptySet<Int>()) }
+    val chosen = state.neighbours.find { it.id == chosenId }
+    val imperial = state.units == SettingsRepository.Units.IMPERIAL
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                if (chosen == null) stringResource(R.string.neighbour_title)
+                else stringResource(R.string.neighbour_pick_corners, chosen.name),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+            )
+
+            if (chosen == null) {
+                Text(
+                    stringResource(R.string.neighbour_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 24.dp)
+                )
+                when {
+                    state.isLoadingNeighbours -> Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 72.dp)
+                            .padding(horizontal = 24.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                    }
+
+                    state.neighbours.isEmpty() -> Text(
+                        stringResource(R.string.neighbour_empty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+                    )
+
+                    // Lazy, not a scrolling Column: someone with fifty saved
+                    // parcels would otherwise have all fifty rows composed to
+                    // read the four that fit on screen.
+                    else -> LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
+                        items(state.neighbours, key = { it.id }) { neighbour ->
+                            NeighbourRow(
+                                neighbour = neighbour,
+                                imperial = imperial,
+                                onClick = {
+                                    chosenId = neighbour.id
+                                    ticked = emptySet()
+                                }
+                            )
+                        }
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    TextButton(onClick = { ticked = chosen.corners.indices.toSet() }) {
+                        Text(stringResource(R.string.neighbour_select_all))
+                    }
+                    TextButton(
+                        onClick = { ticked = emptySet() },
+                        enabled = ticked.isNotEmpty()
+                    ) {
+                        Text(stringResource(R.string.neighbour_clear_selection))
+                    }
+                }
+
+                // Same reason, more sharply: the neighbour may be a walked
+                // track of several hundred readings.
+                LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
+                    itemsIndexed(chosen.corners) { index, point ->
+                        NeighbourCornerRow(
+                            number = index + 1,
+                            point = point,
+                            dms = state.dms,
+                            checked = index in ticked,
+                            onToggle = {
+                                ticked = if (index in ticked) ticked - index else ticked + index
+                            }
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { chosenId = null }) {
+                        Text(stringResource(R.string.action_back))
+                    }
+                    Box(modifier = Modifier.weight(1f))
+                    Button(
+                        onClick = {
+                            onTake(chosen.id, ticked)
+                            onDismiss()
+                        },
+                        enabled = ticked.isNotEmpty()
+                    ) {
+                        Text(
+                            pluralStringResource(
+                                R.plurals.neighbour_add,
+                                ticked.size,
+                                ticked.size
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One candidate land: what it is called, how far off it is, how big its ring. */
+@Composable
+private fun NeighbourRow(
+    neighbour: NeighbourLand,
+    imperial: Boolean,
+    onClick: () -> Unit
+) {
+    val corners = pluralStringResource(
+        R.plurals.boundary_corners,
+        neighbour.corners.size,
+        neighbour.corners.size
+    )
+    // Distance to its nearest corner, which is what says "next door" — a land
+    // fifty metres away is a candidate and one nine kilometres away is not, and
+    // the list is long enough that the figure is what makes it usable.
+    val away = neighbour.distanceM?.let {
+        stringResource(R.string.neighbour_distance, GeoUtils.formatDistance(it, imperial))
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            neighbour.name,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            if (away == null) corners else "$away · $corners",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** One of that land's corners, ticked or not. */
+@Composable
+private fun NeighbourCornerRow(
+    number: Int,
+    point: GeoPoint,
+    dms: Boolean,
+    checked: Boolean,
+    onToggle: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(onClick = onToggle)
+            .padding(start = 16.dp, end = 24.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // The row carries the click, so the box itself does not need to: two
+        // targets for one choice, one of them 20dp wide, is how a tick goes on the
+        // wrong corner.
+        Checkbox(checked = checked, onCheckedChange = null)
+        val coordinates = stringResource(
+            R.string.boundary_corner_number,
+            number,
+            if (dms) GeoUtils.formatDMS(point.latitude, point.longitude)
+            else GeoUtils.formatDecimal(point.latitude, point.longitude)
+        )
+        val accuracy = point.accuracyM?.let {
+            stringResource(R.string.boundary_corner_accuracy, GeoUtils.formatAccuracy(it))
+        }
+        Text(
+            if (accuracy == null) coordinates else "$coordinates  $accuracy",
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = FontFamily.Monospace
+        )
     }
 }
 

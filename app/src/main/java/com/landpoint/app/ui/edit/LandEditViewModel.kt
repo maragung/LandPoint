@@ -70,6 +70,20 @@ data class DraftCorner(
     val point: GeoPoint
 )
 
+/**
+ * Another saved land offered as a source of corners.
+ *
+ * Held with its corners already decoded, because the sheet draws them and the
+ * copy uses them, and [Land.boundary] re-parses its JSON on every read.
+ */
+data class NeighbourLand(
+    val id: String,
+    val name: String,
+    val corners: List<GeoPoint>,
+    /** Metres from this land to the nearest corner of that one, where known. */
+    val distanceM: Double?
+)
+
 data class LandEditUiState(
     val id: String? = null,
     val name: String = "",
@@ -108,6 +122,13 @@ data class LandEditUiState(
      * for the same reason a drag is: the list is rebuilt on every change.
      */
     val selectedCornerId: String? = null,
+    /**
+     * Other saved lands whose corners can be borrowed, nearest first. Loaded on
+     * demand rather than held all the time: it is a list of every land in the
+     * database and it is wanted once, while the sheet is open.
+     */
+    val neighbours: List<NeighbourLand> = emptyList(),
+    val isLoadingNeighbours: Boolean = false,
     /** True while a walk-around measurement is recording. */
     val isWalking: Boolean = false,
     val walkedM: Double = 0.0,
@@ -616,6 +637,91 @@ class LandEditViewModel(
     private fun swapBoundaryPoints(from: Int, to: Int) {
         if (boundaryEditsBlocked()) return
         _uiState.update { it.copy(boundary = BoundaryEdits.swap(it.boundary, from, to)) }
+    }
+
+    /**
+     * Brings in corners from a saved land whose boundary passes near this one.
+     *
+     * Called when the "from neighbour" sheet opens. Held on demand rather than
+     * pre-loaded: the list is every land in the database, and someone using the
+     * app for three neighbours on the other side of the district does not benefit
+     * from that query running six times through the form.
+     */
+    fun loadNeighbours() {
+        val thisId = _uiState.value.id
+        val from = neighbourReference()
+        _uiState.update { it.copy(isLoadingNeighbours = true) }
+        viewModelScope.launch {
+            val lands = repository.getAllLands()
+                .filter { it.id != thisId && it.isPolygon }
+                .mapNotNull { land ->
+                    val corners = land.boundary
+                    if (corners.isEmpty()) return@mapNotNull null
+                    NeighbourLand(
+                        id = land.id,
+                        name = land.name,
+                        corners = corners,
+                        distanceM = from?.let {
+                            PolygonMath.nearestCornerM(corners, it.latitude, it.longitude)
+                        }
+                    )
+                }
+                // Nearest first: the land that shares a peg with this one is the
+                // land standing next to it. With nothing to measure from — a form
+                // with no pin and no corner yet — name order is all there is.
+                .sortedWith(
+                    compareBy<NeighbourLand>({ it.distanceM ?: Double.MAX_VALUE }, { it.name })
+                )
+            _uiState.update { it.copy(neighbours = lands, isLoadingNeighbours = false) }
+        }
+    }
+
+    /**
+     * Where "near" is measured from: the corner the ring would continue from, or
+     * failing that the coordinates on the form.
+     *
+     * Not the centroid, which does not exist until three corners do. A parcel
+     * being recorded beside a known one has its pin long before it has a corner,
+     * and that is exactly when borrowing a shared side is most useful.
+     */
+    private fun neighbourReference(): GeoPoint? {
+        val state = _uiState.value
+        return state.boundary.lastOrNull()
+            ?: BoundaryEdits.parseLatLon(state.latitude, state.longitude)
+    }
+
+    /**
+     * Adds whichever corners of [neighbourId] the user ticked, skipping any that
+     * duplicate a corner already here.
+     *
+     * The skip count is returned through [showMessage] rather than swallowed:
+     * someone who ticks four and gets two corners has to be told which of those
+     * happened, or it looks like half their work disappeared. The message is not
+     * an error — reusing the shared peg is the right call — but it is a material
+     * outcome they need to see.
+     */
+    fun appendFromNeighbour(neighbourId: String, selectedIndices: Set<Int>) {
+        if (boundaryEditsBlocked()) {
+            showMessage(strings.get(R.string.error_corner_busy))
+            return
+        }
+        val land = _uiState.value.neighbours.find { it.id == neighbourId } ?: return
+        val additions = selectedIndices.sorted().mapNotNull { land.corners.getOrNull(it) }
+        if (additions.isEmpty()) return
+        val (updated, skipped) = BoundaryEdits.appendDistinct(_uiState.value.boundary, additions)
+        _uiState.update { it.copy(boundary = updated) }
+        val added = additions.size - skipped
+        showMessage(
+            when {
+                added > 0 && skipped == 0 -> strings.plural(R.plurals.msg_corners_added, added)
+                added > 0 && skipped > 0 -> strings.get(
+                    R.string.msg_corners_added_some_skipped,
+                    added.toString(),
+                    skipped.toString()
+                )
+                else -> strings.get(R.string.msg_corners_all_duplicate)
+            }
+        )
     }
 
     private fun boundaryEditsBlocked(): Boolean =

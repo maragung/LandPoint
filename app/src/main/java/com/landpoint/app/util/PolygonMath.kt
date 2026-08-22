@@ -254,5 +254,16 @@ object PolygonMath {
         return moved >= maxOf(2.0, accuracyM)
     }
 
+    /**
+     * How far the nearest corner of [points] lies from ([lat], [lon]) in metres,
+     * or null when there is no corner to measure to.
+     *
+     * Nearest corner rather than centroid: what makes a saved land worth offering
+     * as a neighbour is that one of its pegs is standing near this one, and a
+     * long thin parcel can run right past a spot its centroid is a kilometre from.
+     */
+    fun nearestCornerM(points: List<GeoPoint>, lat: Double, lon: Double): Double? =
+        points.minOfOrNull { GeoUtils.distance(lat, lon, it.latitude, it.longitude) }
+
     fun GeoSample.toGeoPoint() = GeoPoint(latitude, longitude, accuracy?.toDouble())
 }

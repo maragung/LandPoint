@@ -381,4 +381,57 @@ class BoundaryEditsTest {
         // Two corners make one side, and it is not the second one.
         assertNull(BoundaryEdits.edgeMidpoint(listOf(square[0], square[1]), 1))
     }
+
+    // ---- appendDistinct ----------------------------------------------------
+
+    @Test
+    fun `corners taken from a neighbour land on the end, in the order given`() {
+        val shared = listOf(offset(40.0, 0.0), offset(40.0, 20.0))
+        val result = BoundaryEdits.appendDistinct(square, shared)
+        assertEquals(0, result.skipped)
+        assertEquals(square + shared, result.points)
+    }
+
+    @Test
+    fun `a corner already on the boundary is skipped and counted, not doubled`() {
+        val result = BoundaryEdits.appendDistinct(square, listOf(square[1], offset(40.0, 0.0)))
+        assertEquals(1, result.skipped)
+        assertEquals(5, result.points.size)
+        assertEquals(offset(40.0, 0.0).latitude, result.points.last().latitude, 1e-9)
+    }
+
+    @Test
+    fun `two readings of one peg in the same batch only go in once`() {
+        // The case this exists for: the neighbour's ring holds its own reading of
+        // a corner, and ticking both that and the one beside it must not put two
+        // vertices a handspan apart into the ring.
+        val peg = offset(40.0, 0.0)
+        val sameSpot = offset(40.2, 0.0)
+        val result = BoundaryEdits.appendDistinct(square, listOf(peg, sameSpot))
+        assertEquals(1, result.skipped)
+        assertEquals(square.size + 1, result.points.size)
+    }
+
+    @Test
+    fun `every corner being a duplicate leaves the boundary exactly as it was`() {
+        val result = BoundaryEdits.appendDistinct(square, listOf(square[0], square[2]))
+        assertEquals(2, result.skipped)
+        assertSame(square, result.points)
+    }
+
+    @Test
+    fun `nothing to add is not an edit`() {
+        val result = BoundaryEdits.appendDistinct(square, emptyList())
+        assertEquals(0, result.skipped)
+        assertSame(square, result.points)
+    }
+
+    @Test
+    fun `a borrowed corner keeps the accuracy it was measured at`() {
+        // It is the same peg, so it is the same reading. Dropping the figure would
+        // make a copied corner look like a typed one.
+        val measured = offset(40.0, 0.0).copy(accuracyM = 4.0)
+        val result = BoundaryEdits.appendDistinct(square, listOf(measured))
+        assertEquals(4.0, result.points.last().accuracyM!!, 1e-9)
+    }
 }

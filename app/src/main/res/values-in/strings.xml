@@ -125,6 +125,11 @@
     </plurals>
     <string name="msg_corner_too_close">Titik ini sama dengan sudut sebelumnya</string>
     <string name="msg_corner_inserted">Ditambahkan sebagai sudut %1$d, pada sisi yang Anda ketuk</string>
+    <plurals name="msg_corners_added">
+        <item quantity="other">%1$d sudut diambil dari lahan tetangga</item>
+    </plurals>
+    <string name="msg_corners_added_some_skipped">%1$s sudut diambil, %2$s sudah ada di batas ini</string>
+    <string name="msg_corners_all_duplicate">Sudut-sudut itu sudah ada di batas ini</string>
 
     <!-- Pemilih sudut di peta -->
     <string name="boundary_pick_on_map">Pilih di peta</string>
@@ -154,6 +159,7 @@
     <string name="corner_dialog_title_insert">Sudut baru %1$d</string>
     <string name="boundary_self_crossing">Sisi %1$d dan %2$d saling menyilang, jadi garisnya bukan satu bidang tertutup dan luas di bawah bukan tanah yang dicakupnya. Biasanya ada satu sudut yang urutannya salah — pindahkan ke atas atau ke bawah.</string>
     <string name="boundary_add_bearing">Tambah dari azimut</string>
+    <string name="boundary_from_neighbour">Ambil sudut dari lahan tetangga</string>
     <string name="corner_dialog_title_bearing">Sudut %1$d, diukur dari sudut %2$d</string>
     <string name="corner_dialog_bearing">Azimut (° dari utara)</string>
     <string name="corner_dialog_distance">Panjang sisi (m)</string>
@@ -169,6 +175,16 @@
     <string name="error_corner_invalid">Isi kedua koordinat dalam derajat desimal, pakai tanda titik</string>
     <string name="error_corner_duplicate">Sudah ada sudut yang tercatat di titik itu</string>
     <string name="error_corner_busy">Selesaikan dulu rekaman jalan atau tangkapan GPS</string>
+    <string name="neighbour_title">Batas bersama</string>
+    <string name="neighbour_hint">Dua bidang yang berdampingan harus benar-benar bertemu. Salin sudut yang dipakai bersama dari lahan sebelah daripada mengukurnya lagi.</string>
+    <string name="neighbour_empty">Belum ada lahan lain yang punya batas tersimpan.</string>
+    <string name="neighbour_distance">%1$s dari sini</string>
+    <string name="neighbour_pick_corners">Sudut %1$s yang mana yang dipakai bersama?</string>
+    <string name="neighbour_select_all">Pilih semua</string>
+    <string name="neighbour_clear_selection">Kosongkan</string>
+    <plurals name="neighbour_add">
+        <item quantity="other">Tambah %1$d sudut</item>
+    </plurals>
     <string name="corner_picker_select_hint">Ketuk sebuah sudut untuk memilihnya.</string>
     <string name="corner_picker_delete_selected">Hapus sudut %1$d</string>
     <string name="corner_picker_deselect">Batalkan pilihan</string>

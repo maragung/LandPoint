@@ -249,4 +249,23 @@ class PolygonMathTest {
         val tiny = GeoPoint(lat + 1.0 / 111_320.0, lon)
         assertTrue(!PolygonMath.isMeaningfulStep(previous, tiny, accuracyM = 0.5))
     }
+
+    // ---- nearestCornerM ----
+
+    @Test
+    fun `the nearest corner is the one that decides how near a land is`() {
+        val corners = square(20.0)
+        // Three metres off the north-east corner, and twenty or more from the rest,
+        // so a centroid or a first-corner reading would give a different answer.
+        val near = at(23.0, 20.0)
+        val distance = PolygonMath.nearestCornerM(corners, near.latitude, near.longitude)!!
+        assertEquals(3.0, distance, 0.05)
+    }
+
+    @Test
+    fun `a land with no corners is no distance away, rather than zero`() {
+        // Zero would sort it to the top of a list of neighbours, which is the
+        // opposite of the truth.
+        assertNull(PolygonMath.nearestCornerM(emptyList(), -6.9, 107.6))
+    }
 }

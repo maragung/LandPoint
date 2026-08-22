@@ -133,6 +133,12 @@
     </plurals>
     <string name="msg_corner_too_close">That is the same spot as the last corner</string>
     <string name="msg_corner_inserted">Added as corner %1$d, on the side you tapped</string>
+    <plurals name="msg_corners_added">
+        <item quantity="one">%1$d corner taken from the neighbour</item>
+        <item quantity="other">%1$d corners taken from the neighbour</item>
+    </plurals>
+    <string name="msg_corners_added_some_skipped">%1$s taken, %2$s already on this boundary</string>
+    <string name="msg_corners_all_duplicate">Those corners are already on this boundary</string>
 
     <!-- Map corner picker -->
     <string name="boundary_pick_on_map">Pick on map</string>
@@ -162,6 +168,7 @@
     <string name="corner_dialog_title_insert">New corner %1$d</string>
     <string name="boundary_self_crossing">Sides %1$d and %2$d cross each other, so the outline is not a single enclosed shape and the area below is not the ground it covers. Usually one corner is out of sequence — move it earlier or later.</string>
     <string name="boundary_add_bearing">Add from bearing</string>
+    <string name="boundary_from_neighbour">Take corners from a neighbour</string>
     <string name="corner_dialog_title_bearing">Corner %1$d, measured from corner %2$d</string>
     <string name="corner_dialog_bearing">Bearing (° from north)</string>
     <string name="corner_dialog_distance">Length of the side (m)</string>
@@ -177,6 +184,17 @@
     <string name="error_corner_invalid">Enter both coordinates as decimal degrees, using a dot</string>
     <string name="error_corner_duplicate">A corner is already recorded on that spot</string>
     <string name="error_corner_busy">Finish the walk or the GPS capture first</string>
+    <string name="neighbour_title">Shared boundary</string>
+    <string name="neighbour_hint">Two parcels that meet should meet exactly. Copy the shared corners from the land next door instead of measuring them again.</string>
+    <string name="neighbour_empty">No other land has a boundary saved yet.</string>
+    <string name="neighbour_distance">%1$s from here</string>
+    <string name="neighbour_pick_corners">Which corners of %1$s are shared?</string>
+    <string name="neighbour_select_all">Select all</string>
+    <string name="neighbour_clear_selection">Clear</string>
+    <plurals name="neighbour_add">
+        <item quantity="one">Add %1$d corner</item>
+        <item quantity="other">Add %1$d corners</item>
+    </plurals>
     <string name="corner_picker_select_hint">Tap a corner to select it.</string>
     <string name="corner_picker_delete_selected">Delete corner %1$d</string>
     <string name="corner_picker_deselect">Clear selection</string>

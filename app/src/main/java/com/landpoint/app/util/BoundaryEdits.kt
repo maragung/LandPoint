@@ -199,6 +199,36 @@ object BoundaryEdits {
     }
 
     /**
+     * The result of bringing corners in from somewhere else: the boundary as it
+     * now stands, and how many were left out for landing on a corner already
+     * there.
+     *
+     * The count is returned rather than swallowed because the caller has to say
+     * so. Someone who ticks four corners and gets two has to be told which of
+     * those two things happened, or the app looks like it lost half the work.
+     */
+    data class Appended(val points: List<GeoPoint>, val skipped: Int)
+
+    /**
+     * Adds [additions] to the end of [points], skipping any that duplicate a
+     * corner already present — including one added a moment earlier out of the
+     * same batch.
+     *
+     * Checked against the list as it grows, not against the original: two
+     * neighbours can each hold their own reading of the same shared peg, and
+     * those two readings are metres apart on paper but the same corner on the
+     * ground.
+     */
+    fun appendDistinct(points: List<GeoPoint>, additions: List<GeoPoint>): Appended {
+        var result = points
+        var skipped = 0
+        additions.forEach { point ->
+            if (isDistinct(result, point)) result = result + point else skipped++
+        }
+        return Appended(result, skipped)
+    }
+
+    /**
      * How far [p] is from the line between [a] and [b], in metres.
      *
      * Flat-earth, on a projection centred on [a]: the distances being measured
