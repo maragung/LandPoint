@@ -270,7 +270,7 @@
     </plurals>
 
     <string name="settings_backup_archive">Full backup (with photos)</string>
-    <string name="settings_backup_archive_hint">One file holding every location, boundary and photo. Keep it somewhere else — another phone, a memory card, your own cloud drive — so a lost or reset phone does not take your records with it.</string>
+    <string name="settings_backup_archive_hint">One file holding every location, boundary and photo. Keep it somewhere else — another phone, a memory card, your own cloud drive — so a lost or reset phone does not take your records with it. You can lock it with a password first.</string>
     <string name="settings_backup_json">Backup to JSON</string>
     <string name="settings_export_csv">Export CSV</string>
     <string name="settings_export_pdf">Export PDF report</string>
@@ -404,6 +404,22 @@
     <string name="lock_unlock">Unlock</string>
     <string name="lock_prompt_title">Unlock LandPoint</string>
     <string name="lock_prompt_subtitle">Your land records are behind this lock.</string>
+    <!-- Backup password -->
+    <string name="backup_password_title">Protect this backup?</string>
+    <string name="backup_password_body">A password makes the archive unreadable to anyone who finds the file — on the phone, on a memory card, or wherever you copy it.</string>
+    <string name="backup_password_warning">There is no way to recover a forgotten password. Not by us, not by anyone.</string>
+    <string name="backup_password_field">Password</string>
+    <string name="backup_password_confirm">Repeat password</string>
+    <string name="backup_password_mismatch">The two passwords are not the same.</string>
+    <string name="backup_password_too_short">Use at least 6 characters.</string>
+    <string name="backup_password_use">Use a password</string>
+    <string name="backup_password_skip">No password</string>
+    <string name="restore_password_title">This backup is locked</string>
+    <string name="restore_password_body">Enter the password used when the backup was made.</string>
+    <string name="restore_password_wrong">That password did not open the file. Try again.</string>
+    <string name="restore_password_unlock">Open</string>
+    <string name="password_show">Show password</string>
+    <string name="password_hide">Hide password</string>
     <string name="boundary_corner_tap_hint">Tap a corner to change or delete it.</string>
     <string name="corner_sheet_title">Corner %1$d</string>
     <string name="corner_sheet_edit">Change coordinates</string>

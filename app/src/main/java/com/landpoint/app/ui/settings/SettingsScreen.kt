@@ -12,9 +12,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -35,7 +40,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -43,17 +50,20 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.landpoint.app.BuildConfig
 import com.landpoint.app.R
-import com.landpoint.app.ui.security.AppLockState
-import com.landpoint.app.ui.security.deviceCanAuthenticate
 import com.landpoint.app.data.MapKind
 import com.landpoint.app.data.SettingsRepository
 import com.landpoint.app.data.export.BackupManager
 import com.landpoint.app.data.export.DuplicateStrategy
+import com.landpoint.app.ui.security.AppLockState
+import com.landpoint.app.ui.security.deviceCanAuthenticate
 
 /**
  * [onBack] is null when this is reached as a bottom-bar tab: there is nothing
@@ -75,9 +85,20 @@ fun SettingsScreen(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri -> uri?.let(viewModel::exportJson) }
 
+    // Two launchers because the picker's mime type is fixed when it is created,
+    // and a password-protected archive is not a zip.
     val backupArchive = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
-    ) { uri -> uri?.let(viewModel::backupArchive) }
+    ) { uri -> uri?.let { viewModel.backupArchive(it) } }
+
+    var pendingPassphrase by remember { mutableStateOf<String?>(null) }
+    val backupArchiveLocked = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        uri?.let { viewModel.backupArchive(it, pendingPassphrase) }
+        pendingPassphrase = null
+    }
+    var askBackupPassphrase by remember { mutableStateOf(false) }
 
     val restoreArchive = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -264,7 +285,7 @@ fun SettingsScreen(
                     stringResource(R.string.settings_backup_archive),
                     enabled = !state.isBusy
                 ) {
-                    backupArchive.launch(BackupManager.suggestFileName())
+                    askBackupPassphrase = true
                 }
                 ActionRow(
                     stringResource(R.string.settings_backup_json),
@@ -440,7 +461,197 @@ fun SettingsScreen(
             }
         }
     }
+
+    if (askBackupPassphrase) {
+        BackupPassphraseDialog(
+            onDismiss = { askBackupPassphrase = false },
+            onWithout = {
+                askBackupPassphrase = false
+                backupArchive.launch(BackupManager.suggestFileName())
+            },
+            onWith = { passphrase ->
+                askBackupPassphrase = false
+                pendingPassphrase = passphrase
+                backupArchiveLocked.launch(BackupManager.suggestFileName(encrypted = true))
+            }
+        )
+    }
+
+    // Raised by the ViewModel when the chosen file turns out to be locked, so it
+    // survives the screen being rebuilt while the restore is still pending.
+    state.restorePrompt?.let { prompt ->
+        RestorePassphraseDialog(
+            wrong = prompt.wrong,
+            onDismiss = viewModel::dismissRestorePrompt,
+            onSubmit = { passphrase -> viewModel.restoreArchive(prompt.uri, passphrase) }
+        )
+    }
 }
+
+/**
+ * Offered before the file picker, because the answer decides the extension and
+ * there is no going back to it afterwards.
+ */
+@Composable
+private fun BackupPassphraseDialog(
+    onDismiss: () -> Unit,
+    onWithout: () -> Unit,
+    onWith: (String) -> Unit
+) {
+    var passphrase by remember { mutableStateOf("") }
+    var confirmation by remember { mutableStateOf("") }
+    var revealed by remember { mutableStateOf(false) }
+
+    val tooShort = passphrase.isNotEmpty() && passphrase.length < MIN_PASSPHRASE
+    val mismatch = confirmation.isNotEmpty() && confirmation != passphrase
+    val ready = passphrase.length >= MIN_PASSPHRASE && confirmation == passphrase
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.backup_password_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    stringResource(R.string.backup_password_body),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                // Said plainly and before the fact: there is no recovery path,
+                // and finding that out later means finding it out too late.
+                Text(
+                    stringResource(R.string.backup_password_warning),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+                PassphraseField(
+                    value = passphrase,
+                    onValueChange = { passphrase = it },
+                    label = stringResource(R.string.backup_password_field),
+                    revealed = revealed,
+                    onToggleReveal = { revealed = !revealed },
+                    isError = tooShort
+                )
+                PassphraseField(
+                    value = confirmation,
+                    onValueChange = { confirmation = it },
+                    label = stringResource(R.string.backup_password_confirm),
+                    revealed = revealed,
+                    onToggleReveal = { revealed = !revealed },
+                    isError = mismatch
+                )
+                if (tooShort || mismatch) {
+                    Text(
+                        stringResource(
+                            if (mismatch) R.string.backup_password_mismatch
+                            else R.string.backup_password_too_short
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onWith(passphrase) }, enabled = ready) {
+                Text(stringResource(R.string.backup_password_use))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onWithout) {
+                Text(stringResource(R.string.backup_password_skip))
+            }
+        }
+    )
+}
+
+/** Asked when the chosen file is locked. Cancelling leaves the database untouched. */
+@Composable
+private fun RestorePassphraseDialog(
+    wrong: Boolean,
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit
+) {
+    var passphrase by remember { mutableStateOf("") }
+    var revealed by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.restore_password_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    stringResource(
+                        if (wrong) R.string.restore_password_wrong
+                        else R.string.restore_password_body
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (wrong) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                PassphraseField(
+                    value = passphrase,
+                    onValueChange = { passphrase = it },
+                    label = stringResource(R.string.backup_password_field),
+                    revealed = revealed,
+                    onToggleReveal = { revealed = !revealed },
+                    isError = wrong
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSubmit(passphrase) },
+                enabled = passphrase.isNotEmpty()
+            ) {
+                Text(stringResource(R.string.restore_password_unlock))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        }
+    )
+}
+
+/**
+ * Hidden by default, with a way to look: a password typed blind onto a phone
+ * keyboard is a password that gets mistyped, and the only copy of the archive
+ * would then be locked by something the user never meant to type.
+ */
+@Composable
+private fun PassphraseField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    revealed: Boolean,
+    onToggleReveal: () -> Unit,
+    isError: Boolean
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        singleLine = true,
+        isError = isError,
+        visualTransformation =
+            if (revealed) VisualTransformation.None else PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        trailingIcon = {
+            IconButton(onClick = onToggleReveal) {
+                Icon(
+                    if (revealed) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                    contentDescription = stringResource(
+                        if (revealed) R.string.password_hide else R.string.password_show
+                    )
+                )
+            }
+        },
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+/** Short enough to be typed on a phone, long enough not to be guessed at once. */
+private const val MIN_PASSPHRASE = 6
 
 @Composable
 private fun SettingsSection(

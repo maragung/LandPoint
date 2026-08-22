@@ -260,7 +260,7 @@
     </plurals>
 
     <string name="settings_backup_archive">Cadangan lengkap (dengan foto)</string>
-    <string name="settings_backup_archive_hint">Satu berkas berisi semua lokasi, batas, dan foto. Simpan di tempat lain — HP lain, kartu memori, atau penyimpanan awan milik Anda sendiri — supaya HP yang hilang atau di-reset tidak ikut membawa catatan Anda.</string>
+    <string name="settings_backup_archive_hint">Satu berkas berisi semua lokasi, batas, dan foto. Simpan di tempat lain — HP lain, kartu memori, atau penyimpanan awan milik Anda sendiri — supaya HP yang hilang atau di-reset tidak ikut membawa catatan Anda. Berkasnya bisa dikunci dengan kata sandi lebih dulu.</string>
     <string name="settings_backup_json">Cadangkan ke JSON</string>
     <string name="settings_export_csv">Ekspor CSV</string>
     <string name="settings_export_pdf">Ekspor laporan PDF</string>
@@ -388,6 +388,22 @@
     <string name="lock_unlock">Buka kunci</string>
     <string name="lock_prompt_title">Buka kunci LandPoint</string>
     <string name="lock_prompt_subtitle">Data tanah Anda ada di balik kunci ini.</string>
+    <!-- Sandi backup -->
+    <string name="backup_password_title">Lindungi backup ini?</string>
+    <string name="backup_password_body">Sandi membuat arsipnya tidak bisa dibaca siapa pun yang menemukan berkasnya — di HP, di kartu memori, atau di mana pun Anda menyalinnya.</string>
+    <string name="backup_password_warning">Sandi yang lupa tidak bisa dipulihkan. Tidak oleh kami, tidak oleh siapa pun.</string>
+    <string name="backup_password_field">Sandi</string>
+    <string name="backup_password_confirm">Ulangi sandi</string>
+    <string name="backup_password_mismatch">Kedua sandi belum sama.</string>
+    <string name="backup_password_too_short">Gunakan minimal 6 karakter.</string>
+    <string name="backup_password_use">Pakai sandi</string>
+    <string name="backup_password_skip">Tanpa sandi</string>
+    <string name="restore_password_title">Backup ini terkunci</string>
+    <string name="restore_password_body">Masukkan sandi yang dipakai saat backup dibuat.</string>
+    <string name="restore_password_wrong">Sandi itu tidak membuka berkasnya. Coba lagi.</string>
+    <string name="restore_password_unlock">Buka</string>
+    <string name="password_show">Tampilkan sandi</string>
+    <string name="password_hide">Sembunyikan sandi</string>
     <string name="boundary_corner_tap_hint">Ketuk patok untuk mengubah atau menghapusnya.</string>
     <string name="corner_sheet_title">Patok %1$d</string>
     <string name="corner_sheet_edit">Ubah koordinat</string>

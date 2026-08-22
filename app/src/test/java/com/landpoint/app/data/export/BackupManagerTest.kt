@@ -223,10 +223,108 @@ class BackupManagerTest {
     }
 
     @Test
+    fun `a password-protected archive round trips and refuses a wrong password`() = runTest {
+        val id = seedLandWithBoundary("Sawah bawah")
+        val bytes = ByteArray(300) { (it % 97).toByte() }
+        addPhoto(id, bytes)
+
+        val file = archive()
+        val result = manager.backup(Uri.fromFile(file), "kunci rahasia".toCharArray())
+        assertFalse(result.error ?: "", result.isFailure)
+        assertEquals(1, result.photos)
+        // Not a zip any more, and it says so in its first bytes — which is what
+        // restore reads to decide how to open it.
+        assertTrue(
+            "archive must carry the encrypted marker",
+            ArchiveCrypto.looksEncrypted(file.readBytes())
+        )
+
+        repository.deleteAll()
+
+        val without = manager.restore(Uri.fromFile(file), DuplicateStrategy.KEEP_BOTH)
+        assertTrue("a locked file must ask rather than fail", without.needsPassphrase)
+        assertFalse(without.wrongPassphrase)
+        assertTrue(repository.getAllLands().isEmpty())
+
+        val wrong = manager.restore(
+            Uri.fromFile(file),
+            DuplicateStrategy.KEEP_BOTH,
+            "salah".toCharArray()
+        )
+        assertTrue(wrong.needsPassphrase)
+        assertTrue("a wrong password must be named as such", wrong.wrongPassphrase)
+        assertTrue(repository.getAllLands().isEmpty())
+
+        val right = manager.restore(
+            Uri.fromFile(file),
+            DuplicateStrategy.KEEP_BOTH,
+            "kunci rahasia".toCharArray()
+        )
+        assertFalse(right.error ?: "", right.isFailure)
+        assertEquals(1, right.result!!.imported)
+        val land = repository.getAllLands().single()
+        assertEquals("Sawah bawah", land.name)
+        assertEquals(boundary.size, land.boundary.size)
+        assertArrayEquals(bytes, File(land.photos.single().filePath).readBytes())
+    }
+
+    @Test
+    fun `an unencrypted archive still restores`() = runTest {
+        // The format changed; the files people already have did not.
+        val id = seedLandWithBoundary("Tanah warisan")
+        addPhoto(id, ByteArray(64) { 9 })
+        val file = archive()
+        manager.backup(Uri.fromFile(file))
+        repository.deleteAll()
+
+        val restored = manager.restore(Uri.fromFile(file), DuplicateStrategy.KEEP_BOTH)
+        assertFalse(restored.error ?: "", restored.isFailure)
+        assertFalse(restored.needsPassphrase)
+        assertEquals("Tanah warisan", repository.getAllLands().single().name)
+    }
+
+    @Test
+    fun `a restore that never lands leaves no orphaned photos on disk`() = runTest {
+        // Photos are extracted before the manifest is trusted, so a file whose
+        // records turn out to be unreadable can still have written images. With
+        // no land pointing at them they would sit in storage for good.
+        val file = archive()
+        ZipOutputStream(file.outputStream()).use { zip ->
+            zip.putNextEntry(ZipEntry("photos/whatever.jpg"))
+            zip.write(ByteArray(1024) { 8 })
+            zip.closeEntry()
+            zip.putNextEntry(ZipEntry("landpoint.json"))
+            zip.write("{ this is not json".toByteArray())
+            zip.closeEntry()
+        }
+
+        val images = File(context.filesDir, "images")
+        images.listFiles()?.forEach { it.delete() }
+
+        val restored = manager.restore(Uri.fromFile(file), DuplicateStrategy.KEEP_BOTH)
+        assertTrue(restored.isFailure)
+        assertTrue(repository.getAllLands().isEmpty())
+        assertEquals(
+            "half-restored photos must be swept up",
+            emptyList<String>(),
+            images.listFiles().orEmpty().map { it.name }
+        )
+    }
+
+    @Test
     fun `suggested file name is a zip stamped with the moment`() {
         val name = BackupManager.suggestFileName()
         assertTrue(name, name.startsWith("landpoint-backup-"))
         assertTrue(name, name.endsWith(".zip"))
         assertTrue(name, name.length > "landpoint-backup-.zip".length)
+    }
+
+    @Test
+    fun `a protected archive is not offered as a zip`() {
+        // No file manager can open it, and the extension is the only warning of
+        // that the user gets months later.
+        val name = BackupManager.suggestFileName(encrypted = true)
+        assertTrue(name, name.startsWith("landpoint-backup-"))
+        assertTrue(name, name.endsWith(".lpbk"))
     }
 }

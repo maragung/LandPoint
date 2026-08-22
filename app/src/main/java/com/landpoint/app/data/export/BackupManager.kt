@@ -9,7 +9,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -27,6 +30,10 @@ import java.util.zip.ZipOutputStream
  *
  * A plain .json export remains supported for people who only want the numbers;
  * this one exists so the photos survive a lost phone too.
+ *
+ * Optionally the whole archive is wrapped in [ArchiveCrypto], because this is the
+ * one file that leaves the phone. Restore accepts both, deciding from the file's
+ * own first bytes — an archive written by an earlier version keeps working.
  */
 class BackupManager(
     private val context: Context,
@@ -41,53 +48,63 @@ class BackupManager(
         encodeDefaults = true
     }
 
-    suspend fun backup(uri: Uri): BackupResult = withContext(Dispatchers.IO) {
-        runCatching {
-            val lands = repository.getAllLands()
-            var photosWritten = 0
-            var photosMissing = 0
+    /**
+     * Writes the archive. With a [passphrase] the result is unreadable without it —
+     * including by us, so a forgotten password means a lost backup, and the UI
+     * says so before asking for one.
+     */
+    suspend fun backup(uri: Uri, passphrase: CharArray? = null): BackupResult =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val lands = repository.getAllLands()
+                var photosWritten = 0
+                var photosMissing = 0
 
-            val output = context.contentResolver.openOutputStream(uri, "wt")
-                ?: error("Cannot open file for writing")
+                val output = context.contentResolver.openOutputStream(uri, "wt")
+                    ?: error("Cannot open file for writing")
 
-            output.use { raw ->
-                ZipOutputStream(BufferedOutputStream(raw)).use { zip ->
-                    val entries = lands.map { land -> land.toBackupJson() }
+                output.use { raw ->
+                    val sink: OutputStream = BufferedOutputStream(raw).let { buffered ->
+                        if (passphrase == null) buffered
+                        else ArchiveCrypto.encryptingStream(buffered, passphrase)
+                    }
+                    ZipOutputStream(sink).use { zip ->
+                        val entries = lands.map { land -> land.toBackupJson() }
 
-                    zip.putNextEntry(ZipEntry(MANIFEST))
-                    val envelope = LandPointBackup(
-                        version = CURRENT_BACKUP_VERSION,
-                        exportedAt = System.currentTimeMillis(),
-                        lands = entries
-                    )
-                    zip.write(json.encodeToString(envelope).toByteArray(Charsets.UTF_8))
-                    zip.closeEntry()
+                        zip.putNextEntry(ZipEntry(MANIFEST))
+                        val envelope = LandPointBackup(
+                            version = CURRENT_BACKUP_VERSION,
+                            exportedAt = System.currentTimeMillis(),
+                            lands = entries
+                        )
+                        zip.write(json.encodeToString(envelope).toByteArray(Charsets.UTF_8))
+                        zip.closeEntry()
 
-                    // A photo whose file has gone missing must not abort the
-                    // whole backup — the land records are the irreplaceable part.
-                    lands.forEach { land ->
-                        land.photos.forEach { photo ->
-                            val source = photoStore.openForBackup(photo.filePath)
-                            if (source == null) {
-                                photosMissing++
-                                return@forEach
+                        // A photo whose file has gone missing must not abort the
+                        // whole backup — the land records are the irreplaceable part.
+                        lands.forEach { land ->
+                            land.photos.forEach { photo ->
+                                val source = photoStore.openForBackup(photo.filePath)
+                                if (source == null) {
+                                    photosMissing++
+                                    return@forEach
+                                }
+                                zip.putNextEntry(ZipEntry("$PHOTO_DIR${photo.id}.jpg"))
+                                source.use { it.copyTo(zip) }
+                                zip.closeEntry()
+                                photosWritten++
                             }
-                            zip.putNextEntry(ZipEntry("$PHOTO_DIR${photo.id}.jpg"))
-                            source.use { it.copyTo(zip) }
-                            zip.closeEntry()
-                            photosWritten++
                         }
                     }
                 }
-            }
 
-            BackupResult(
-                lands = lands.size,
-                photos = photosWritten,
-                missingPhotos = photosMissing
-            )
-        }.getOrElse { BackupResult(error = it.message ?: "Backup failed") }
-    }
+                BackupResult(
+                    lands = lands.size,
+                    photos = photosWritten,
+                    missingPhotos = photosMissing
+                )
+            }.getOrElse { BackupResult(error = it.message ?: "Backup failed") }
+        }
 
     /**
      * A backup written by this app names every photo entry after the photo's own
@@ -113,17 +130,47 @@ class BackupManager(
      * half-way then leaves orphaned files rather than records pointing at
      * pictures that never arrived.
      */
-    suspend fun restore(uri: Uri, strategy: DuplicateStrategy): RestoreResult =
+    suspend fun restore(
+        uri: Uri,
+        strategy: DuplicateStrategy,
+        passphrase: CharArray? = null
+    ): RestoreResult =
         withContext(Dispatchers.IO) {
+            var manifest: LandPointBackup? = null
+            // Hoisted out of the attempt so images already unpacked by a restore
+            // that then failed — a wrong password, a damaged file — can be swept
+            // up rather than left in storage with nothing pointing at them.
+            val photoPaths = mutableMapOf<String, String>()
+
             runCatching {
                 val input = context.contentResolver.openInputStream(uri)
                     ?: error("Cannot open file for reading")
 
-                var manifest: LandPointBackup? = null
-                val photoPaths = mutableMapOf<String, String>()
-
                 input.use { raw ->
-                    ZipInputStream(raw).use { zip ->
+                    val buffered = BufferedInputStream(raw)
+                    // The file says what it is; the extension is only a hint, and
+                    // an archive from an older version carries no marker at all.
+                    buffered.mark(ArchiveCrypto.PROBE_BYTES)
+                    val probe = ByteArray(ArchiveCrypto.PROBE_BYTES)
+                    var read = 0
+                    while (read < probe.size) {
+                        // A single read is allowed to return less than it was
+                        // asked for, and six bytes decide how the file is opened.
+                        val n = buffered.read(probe, read, probe.size - read)
+                        if (n < 0) break
+                        read += n
+                    }
+                    buffered.reset()
+                    val encrypted = ArchiveCrypto.looksEncrypted(probe.copyOf(read))
+
+                    if (encrypted && passphrase == null) {
+                        return@withContext RestoreResult(needsPassphrase = true)
+                    }
+                    val source: InputStream =
+                        if (encrypted) ArchiveCrypto.decryptingStream(buffered, passphrase!!)
+                        else buffered
+
+                    ZipInputStream(source).use { zip ->
                         var entry = zip.nextEntry
                         while (entry != null) {
                             val name = entry.name
@@ -149,10 +196,15 @@ class BackupManager(
                     }
                 }
 
-                val backup = manifest
-                    ?: return@withContext RestoreResult(
+                val backup = manifest ?: run {
+                    // A file can carry readable photo entries and an unreadable
+                    // manifest. Those images are already on disk and no record
+                    // will ever claim them, so sweep before giving up.
+                    discardUnusedPhotos(photoPaths, linked = 0)
+                    return@withContext RestoreResult(
                         error = "This file is not a LandPoint backup"
                     )
+                }
 
                 // Photos extracted for lands that end up skipped as duplicates
                 // would otherwise sit in storage forever with nothing pointing
@@ -165,7 +217,16 @@ class BackupManager(
                 discardUnusedPhotos(photoPaths, applied.photos)
 
                 RestoreResult(result = applied)
-            }.getOrElse { RestoreResult(error = it.message ?: "Restore failed") }
+            }.getOrElse { failure ->
+                // Nothing was applied, so every image unpacked above is an orphan
+                // unless some earlier restore had already linked it.
+                discardUnusedPhotos(photoPaths, linked = 0)
+                when (failure) {
+                    is ArchiveCrypto.WrongPassphraseException ->
+                        RestoreResult(needsPassphrase = true, wrongPassphrase = true)
+                    else -> RestoreResult(error = failure.message ?: "Restore failed")
+                }
+            }
         }
 
     /** Deletes extracted images that no restored land claimed. */
@@ -194,10 +255,15 @@ class BackupManager(
         private const val MANIFEST = "landpoint.json"
         private const val PHOTO_DIR = "photos/"
 
-        fun suggestFileName(): String {
+        /**
+         * A password-protected archive is not a zip any more and should not claim
+         * to be one: no file manager can open it, and the extension is the only
+         * warning of that the user gets months later.
+         */
+        fun suggestFileName(encrypted: Boolean = false): String {
             val stamp = android.text.format.DateFormat
                 .format("yyyyMMdd-HHmmss", System.currentTimeMillis())
-            return "landpoint-backup-$stamp.zip"
+            return "landpoint-backup-$stamp." + if (encrypted) "lpbk" else "zip"
         }
     }
 }
@@ -214,7 +280,10 @@ data class BackupResult(
 /** The archive as read, and what applying it to the database did. */
 data class RestoreResult(
     val result: ImportResult? = null,
-    val error: String? = null
+    val error: String? = null,
+    /** The file is password-protected and the password given was absent or wrong. */
+    val needsPassphrase: Boolean = false,
+    val wrongPassphrase: Boolean = false
 ) {
-    val isFailure: Boolean get() = error != null
+    val isFailure: Boolean get() = error != null || needsPassphrase
 }

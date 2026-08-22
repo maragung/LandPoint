@@ -36,11 +36,27 @@ data class SettingsUiState(
     val areaUnit: SettingsRepository.AreaUnit = SettingsRepository.AreaUnit.SQM,
     val privacy: SettingsRepository.Privacy = SettingsRepository.Privacy(),
     val duplicateStrategy: DuplicateStrategy = DuplicateStrategy.SKIP,
+    /** Set while a password-protected archive is waiting to be unlocked. */
+    val restorePrompt: RestorePrompt? = null,
     val landCount: Int = 0,
     val offlineArchives: List<OfflineArchive> = emptyList(),
     val cachedTileBytes: Long = 0,
     val isBusy: Boolean = false,
     val message: String? = null
+)
+
+/**
+ * A restore that stopped because the file is locked. [wrong] tells the dialog to
+ * say the last attempt failed, rather than asking as if for the first time.
+ */
+data class RestorePrompt(val uri: Uri, val wrong: Boolean = false)
+
+/** The four in-memory flows, grouped to stay inside combine()'s five-flow limit. */
+private data class TaskState(
+    val busy: Boolean,
+    val message: String?,
+    val strategy: DuplicateStrategy,
+    val restorePrompt: RestorePrompt?
 )
 
 /** Offline map state, read off the filesystem rather than from a Flow. */
@@ -63,6 +79,7 @@ class SettingsViewModel(
     private val busy = MutableStateFlow(false)
     private val message = MutableStateFlow<String?>(null)
     private val duplicateStrategy = MutableStateFlow(DuplicateStrategy.SKIP)
+    private val restorePrompt = MutableStateFlow<RestorePrompt?>(null)
     private val offline = MutableStateFlow(OfflineState())
 
     val uiState: StateFlow<SettingsUiState> = combine(
@@ -73,8 +90,10 @@ class SettingsViewModel(
         combine(settings.units, settings.areaUnit) { units, area -> units to area },
         // Paired to stay inside combine()'s five-flow limit.
         combine(repository.observeCount(), offline) { count, maps -> count to maps },
-        combine(busy, message, duplicateStrategy) { b, m, d -> Triple(b, m, d) }
-    ) { appearance, formatAndPrivacy, unitsAndArea, countAndMaps, (isBusy, msg, strategy) ->
+        combine(busy, message, duplicateStrategy, restorePrompt) { b, m, d, prompt ->
+            TaskState(b, m, d, prompt)
+        }
+    ) { appearance, formatAndPrivacy, unitsAndArea, countAndMaps, task ->
         val (language, dark, dynamic) = appearance
         val (format, privacy) = formatAndPrivacy
         val (units, areaUnit) = unitsAndArea
@@ -87,12 +106,13 @@ class SettingsViewModel(
             units = units,
             areaUnit = areaUnit,
             privacy = privacy,
-            duplicateStrategy = strategy,
+            duplicateStrategy = task.strategy,
+            restorePrompt = task.restorePrompt,
             landCount = count,
             offlineArchives = maps.archives,
             cachedTileBytes = maps.cachedTileBytes,
-            isBusy = isBusy,
-            message = msg
+            isBusy = task.busy,
+            message = task.message
         )
     }.stateIn(
         scope = viewModelScope,
@@ -159,8 +179,16 @@ class SettingsViewModel(
      * themselves. Nothing leaves the device — the archive is written to whatever
      * location the system file picker returned.
      */
-    fun backupArchive(uri: Uri) = runTask {
-        val result = backupManager.backup(uri)
+    fun backupArchive(uri: Uri, passphrase: String? = null) = runTask {
+        // Wiped straight after use. The String behind it cannot be — Compose text
+        // fields deal in Strings — so this shortens the window rather than
+        // closing it, which is still worth doing.
+        val secret = passphrase?.takeIf { it.isNotEmpty() }?.toCharArray()
+        val result = try {
+            backupManager.backup(uri, secret)
+        } finally {
+            secret?.fill('\u0000')
+        }
         when {
             result.isFailure -> strings.get(R.string.msg_backup_failed, result.error ?: "")
             // Say so when photo files had gone missing; a silently smaller
@@ -175,12 +203,24 @@ class SettingsViewModel(
         }
     }
 
-    fun restoreArchive(uri: Uri) = runTask {
-        val result = backupManager.restore(uri, duplicateStrategy.value)
+    fun restoreArchive(uri: Uri, passphrase: String? = null) = runTask {
+        val secret = passphrase?.takeIf { it.isNotEmpty() }?.toCharArray()
+        val result = try {
+            backupManager.restore(uri, duplicateStrategy.value, secret)
+        } finally {
+            secret?.fill('\u0000')
+        }
         val applied = result.result
-        if (result.isFailure || applied == null) {
+        if (result.needsPassphrase) {
+            // Not an error the user has to read and dismiss: it is a question, so
+            // ask it. The dialog carries whether the last answer was wrong.
+            restorePrompt.value = RestorePrompt(uri, wrong = result.wrongPassphrase)
+            null
+        } else if (result.isFailure || applied == null) {
+            restorePrompt.value = null
             strings.get(R.string.msg_restore_failed, result.error ?: "")
         } else {
+            restorePrompt.value = null
             summarise(applied.imported, applied.skipped, applied.replaced, applied.invalid) +
                 if (applied.photos > 0) {
                     strings.plural(R.plurals.msg_restore_photos, applied.photos)
@@ -272,7 +312,8 @@ class SettingsViewModel(
             if (invalid > 0) append(strings.plural(R.plurals.msg_import_invalid, invalid))
         }
 
-    private fun runTask(block: suspend () -> String) {
+    /** [block] returns the line to show, or null when there is nothing to say. */
+    private fun runTask(block: suspend () -> String?) {
         viewModelScope.launch {
             busy.value = true
             message.value = runCatching {
@@ -289,6 +330,10 @@ class SettingsViewModel(
             }
             busy.value = false
         }
+    }
+
+    fun dismissRestorePrompt() {
+        restorePrompt.value = null
     }
 
     fun consumeMessage() {
