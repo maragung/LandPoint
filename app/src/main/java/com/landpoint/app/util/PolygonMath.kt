@@ -59,6 +59,78 @@ object PolygonMath {
         return 2.0 * atan2(t * sin(deltaLon), 1 + t * cos(deltaLon))
     }
 
+    /**
+     * The first pair of sides that cross each other, numbered from 1, or null if
+     * the outline is simple.
+     *
+     * A ring that crosses itself is not a parcel, and the trouble is that
+     * [areaSqm] does not say so: the signed accumulation quietly returns the
+     * *difference* between the two lobes instead of the ground enclosed, and for
+     * a boundary shaped like a bow tie that figure can be almost anything,
+     * including nearly zero. Nothing downstream catches it either — the shape
+     * exports, prints and closes neatly. So it has to be noticed here.
+     *
+     * Almost always the cause is one corner typed or tapped out of sequence,
+     * which is why the sides are named: the fix is to move a corner earlier or
+     * later, and the user has to know which one.
+     *
+     * Sides sharing a corner are skipped — they meet there by construction.
+     */
+    fun selfCrossing(points: List<GeoPoint>): Pair<Int, Int>? {
+        val n = points.size
+        if (n < 4) return null
+
+        // Projected once, flat, in metres from the first corner. Over a parcel the
+        // curvature dropped here is orders of magnitude under the GPS noise in the
+        // corners themselves, and a crossing is a topological fact that survives
+        // any projection this local.
+        val metresPerDegree = EARTH_RADIUS_M * Math.PI / 180.0
+        val metresPerDegreeLon = metresPerDegree * cos(Math.toRadians(points[0].latitude))
+        val xs = DoubleArray(n) { (points[it].longitude - points[0].longitude) * metresPerDegreeLon }
+        val ys = DoubleArray(n) { (points[it].latitude - points[0].latitude) * metresPerDegree }
+
+        for (i in 0 until n) {
+            val iNext = (i + 1) % n
+            for (j in i + 1 until n) {
+                val jNext = (j + 1) % n
+                // Adjacent sides, and the last against the first, share an end.
+                if (i == jNext || j == iNext) continue
+                if (crosses(
+                        xs[i], ys[i], xs[iNext], ys[iNext],
+                        xs[j], ys[j], xs[jNext], ys[jNext]
+                    )
+                ) {
+                    return (i + 1) to (j + 1)
+                }
+            }
+        }
+        return null
+    }
+
+    /**
+     * Whether the two segments properly cross, by the sign of four orientation
+     * tests. Strict, so segments that merely touch end to end or lie along each
+     * other are not reported: those come from a duplicated corner, which the
+     * editor refuses at entry, and reporting them here would put a warning on
+     * boundaries that are fine.
+     */
+    private fun crosses(
+        ax: Double, ay: Double, bx: Double, by: Double,
+        cx: Double, cy: Double, dx: Double, dy: Double
+    ): Boolean {
+        val d1 = cross(cx, cy, dx, dy, ax, ay)
+        val d2 = cross(cx, cy, dx, dy, bx, by)
+        val d3 = cross(ax, ay, bx, by, cx, cy)
+        val d4 = cross(ax, ay, bx, by, dx, dy)
+        if (d1 == 0.0 || d2 == 0.0 || d3 == 0.0 || d4 == 0.0) return false
+        return (d1 > 0.0) != (d2 > 0.0) && (d3 > 0.0) != (d4 > 0.0)
+    }
+
+    /** Which side of the line through (x1,y1)-(x2,y2) the point (px,py) falls. */
+    private fun cross(
+        x1: Double, y1: Double, x2: Double, y2: Double, px: Double, py: Double
+    ): Double = (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
+
     /** Total length of the closed boundary, including the edge back to the start. */
     fun perimeterM(points: List<GeoPoint>): Double {
         if (points.size < 2) return 0.0

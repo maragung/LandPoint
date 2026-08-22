@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.EditLocationAlt
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -631,6 +632,29 @@ private fun BoundarySection(
                 onMoveUp = onMoveCornerUp,
                 onMoveDown = onMoveCornerDown
             )
+        }
+
+        // Above the figures, not below them: the point is that the area under it
+        // cannot be trusted, and a warning read afterwards is a warning read too
+        // late. Saving is still allowed — the shape is the owner's to describe,
+        // and refusing it would strand someone mid-entry with no way out.
+        state.selfCrossing?.let { (first, second) ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Icon(
+                    Icons.Outlined.WarningAmber,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    stringResource(R.string.boundary_self_crossing, first, second),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
         }
 
         val area = state.areaSqm

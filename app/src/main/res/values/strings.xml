@@ -158,6 +158,7 @@
     <string name="corner_dialog_title_add">Add a corner</string>
     <string name="corner_dialog_title_edit">Corner %1$d</string>
     <string name="corner_dialog_title_insert">New corner %1$d</string>
+    <string name="boundary_self_crossing">Sides %1$d and %2$d cross each other, so the outline is not a single enclosed shape and the area below is not the ground it covers. Usually one corner is out of sequence — move it earlier or later.</string>
     <string name="boundary_add_bearing">Add from bearing</string>
     <string name="corner_dialog_title_bearing">Corner %1$d, measured from corner %2$d</string>
     <string name="corner_dialog_bearing">Bearing (° from north)</string>

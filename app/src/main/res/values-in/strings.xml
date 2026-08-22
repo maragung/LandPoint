@@ -150,6 +150,7 @@
     <string name="corner_dialog_title_add">Tambah sudut</string>
     <string name="corner_dialog_title_edit">Sudut %1$d</string>
     <string name="corner_dialog_title_insert">Sudut baru %1$d</string>
+    <string name="boundary_self_crossing">Sisi %1$d dan %2$d saling menyilang, jadi garisnya bukan satu bidang tertutup dan luas di bawah bukan tanah yang dicakupnya. Biasanya ada satu sudut yang urutannya salah — pindahkan ke atas atau ke bawah.</string>
     <string name="boundary_add_bearing">Tambah dari azimut</string>
     <string name="corner_dialog_title_bearing">Sudut %1$d, diukur dari sudut %2$d</string>
     <string name="corner_dialog_bearing">Azimut (° dari utara)</string>

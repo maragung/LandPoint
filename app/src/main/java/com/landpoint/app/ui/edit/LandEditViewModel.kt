@@ -133,6 +133,23 @@ data class LandEditUiState(
             else -> null
         }
 
+    /**
+     * The two sides that cross each other, if any do, numbered from 1.
+     *
+     * Not computed for a walked track. Checking every pair of sides is quadratic
+     * and this is a getter read on each recomposition, and a track of six hundred
+     * readings would be checked a hundred and eighty thousand pairs at a time.
+     * More to the point, someone walking the edge of a field does cross their own
+     * path near where they started, and that is not the mistake this is looking
+     * for: a corner typed or tapped out of sequence.
+     */
+    val selfCrossing: Pair<Int, Int>?
+        get() = if (boundary.size in 4..CROSSING_CHECK_LIMIT) {
+            PolygonMath.selfCrossing(boundary)
+        } else {
+            null
+        }
+
     /** The draft as plain points — what the map draws and what commit writes back. */
     val draftPoints: List<GeoPoint> get() = draftBoundary.map { it.point }
 
@@ -155,6 +172,13 @@ data class LandEditUiState(
     val pinPoint: GeoPoint?
         get() = if (hasPolygon) PolygonMath.centroid(boundary) else null
 }
+
+/**
+ * Above this many corners the boundary was walked rather than placed, and the
+ * crossing check is both too expensive for a getter and looking for a mistake
+ * that a walked track does not make.
+ */
+private const val CROSSING_CHECK_LIMIT = 60
 
 class LandEditViewModel(
     private val repository: LandRepository,
