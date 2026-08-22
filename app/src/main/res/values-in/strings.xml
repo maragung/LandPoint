@@ -160,7 +160,7 @@
     <string name="boundary_pin_centroid">Titik pin lahan: %1$s</string>
     <string name="corner_picker_title">Tandai sudut-sudut</string>
     <string name="corner_picker_tap_hint">Ketuk peta untuk menandai sudut, atau ketuk garisnya untuk menambah sudut di antara dua sudut yang dihubungkannya. Geser sudut untuk memindahkannya.</string>
-    <string name="corner_picker_no_map">Peta offline belum diimpor, jadi latar kosong. Sudut, luas, dan posisi Anda tetap berfungsi.</string>
+    <string name="corner_picker_online_map">Latar peta diambil dari internet. Tanpa sinyal latarnya kosong — sudut, luas, dan posisi Anda tetap berfungsi.</string>
     <string name="corner_picker_use_gps">Pakai posisi saya</string>
     <string name="corner_picker_done">Pakai batas ini</string>
     <string name="corner_picker_cancel">Batal</string>
@@ -477,4 +477,24 @@
     <string name="corner_sheet_edit">Ubah koordinat</string>
     <string name="corner_sheet_delete">Hapus patok ini</string>
     <string name="corner_sheet_insert">Sisipkan patok jadi nomor %1$d</string>
+    <!-- Map styles: what the tiles under a boundary are drawn from. -->
+    <string name="map_style">Tampilan peta</string>
+    <string name="map_style_note">Citra udara adalah gambar permukaan tanah pada satu hari, bukan hasil ukur. Pakai untuk mengenali lokasinya — jangan sebagai bukti letak batas.</string>
+    <string name="basemap_street">Peta jalan</string>
+    <string name="basemap_street_summary">Jalan, nama tempat, dan bangunan. Perlu koneksi.</string>
+    <string name="basemap_satellite">Satelit</string>
+    <string name="basemap_satellite_summary">Foto udara — sawah, atap, dan pohon apa adanya. Perlu koneksi.</string>
+    <string name="basemap_terrain">Rupa bumi</string>
+    <string name="basemap_terrain_summary">Garis kontur dan bayangan bukit, untuk tanah berlereng. Perlu koneksi.</string>
+    <string name="basemap_imported">Peta offline</string>
+    <string name="basemap_imported_summary">Berkas peta yang tersimpan di HP ini. Bisa tanpa sinyal.</string>
+    <string name="basemap_imported_missing">Impor berkas .map di Setelan untuk memakainya.</string>
+    <!-- Floating map controls. -->
+    <string name="map_zoom_in">Perbesar</string>
+    <string name="map_zoom_out">Perkecil</string>
+    <string name="map_fit">Tampilkan semuanya di layar</string>
+    <string name="map_attribution_esri">Citra © Esri, Maxar, Earthstar Geographics</string>
+    <string name="map_attribution_topo">© OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)</string>
+    <string name="corner_picker_show_controls">Tampilkan alat sudut</string>
+    <string name="corner_picker_hide_controls">Sembunyikan alat sudut, perluas peta</string>
 </resources>

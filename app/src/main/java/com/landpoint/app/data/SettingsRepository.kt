@@ -23,6 +23,7 @@ class SettingsRepository(private val context: Context) {
         val COORD_FORMAT = stringPreferencesKey("coord_format")   // decimal | dms
         val LANGUAGE = stringPreferencesKey("language")           // system | en | in
         val AREA_UNIT = stringPreferencesKey("area_unit")         // AreaUnit.key
+        val BASEMAP = stringPreferencesKey("basemap")             // BasemapMode.key
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val APP_LOCK = booleanPreferencesKey("app_lock")
         val SECURE_SCREEN = booleanPreferencesKey("secure_screen")
@@ -128,6 +129,19 @@ class SettingsRepository(private val context: Context) {
     }
 
     /**
+     * What the maps draw underneath — street, satellite, terrain, or the map the
+     * user imported. See [BasemapMode].
+     *
+     * Null means never chosen, and is passed on as null rather than defaulted
+     * here: what "unchosen" should draw depends on whether an offline map has
+     * been imported, which this repository has no way of knowing.
+     * [BasemapMode.resolve] is where that decision lives.
+     */
+    val basemap: Flow<BasemapMode?> = context.settingsDataStore.data.map {
+        BasemapMode.fromKey(it[Keys.BASEMAP])
+    }
+
+    /**
      * Off by default: the green palette is the app's identity, so wallpaper
      * colours are something a user opts into rather than the other way round.
      */
@@ -203,6 +217,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setAreaUnit(unit: AreaUnit) = context.settingsDataStore.edit {
         it[Keys.AREA_UNIT] = unit.key
+    }
+
+    suspend fun setBasemap(mode: BasemapMode) = context.settingsDataStore.edit {
+        it[Keys.BASEMAP] = mode.key
     }
 
     suspend fun setDynamicColor(enabled: Boolean) = context.settingsDataStore.edit {

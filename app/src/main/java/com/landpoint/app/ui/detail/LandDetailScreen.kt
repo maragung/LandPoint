@@ -75,12 +75,14 @@ import com.landpoint.app.data.model.Land
 import com.landpoint.app.data.model.Photo
 import androidx.compose.ui.res.pluralStringResource
 import com.landpoint.app.ui.components.LandShapeThumb
+import com.landpoint.app.ui.components.MapAttribution
 import com.landpoint.app.ui.components.PARCEL_ZOOM
 import com.landpoint.app.ui.components.applyTileTheme
-import com.landpoint.app.ui.components.boundsOf
 import com.landpoint.app.ui.components.cornerMarkerIcon
 import com.landpoint.app.ui.components.describeForAccessibility
 import com.landpoint.app.ui.components.drawBoundary
+import com.landpoint.app.ui.components.frame
+import com.landpoint.app.ui.components.rememberBasemapChoice
 import com.landpoint.app.ui.components.rememberLandMapView
 import com.landpoint.app.util.AreaFormat
 import com.landpoint.app.util.GeoPoint
@@ -465,12 +467,21 @@ private fun BoundaryMapCard(
         stringResource(R.string.detail_a11y_map_point)
     }
 
+    // The style chosen on the full-screen maps, shown here too: the point of this
+    // card is recognising the place at a glance, and someone who picked aerial
+    // imagery for that reason wants it on the picture as much as on the map.
+    val basemap = rememberBasemapChoice(hasVectorMap = vectorSource != null)
     val mapView = rememberLandMapView(
         vectorSource = vectorSource,
-        interactive = false,
-        maxZoomWithoutVector = PARCEL_ZOOM
+        basemap = basemap.mode,
+        interactive = false
     )
     val hasCentred = remember(mapView) { mutableStateOf(false) }
+
+    // The corners, or the pin of a land that has none.
+    val framePoints = remember(boundary, land.id) {
+        boundary.ifEmpty { listOf(GeoPoint(land.latitude, land.longitude)) }
+    }
 
     Card {
         Box(modifier = Modifier.fillMaxWidth().height(200.dp)) {
@@ -478,7 +489,7 @@ private fun BoundaryMapCard(
                 factory = { mapView },
                 modifier = Modifier.fillMaxSize(),
                 update = { map ->
-                    map.applyTileTheme(isDark)
+                    map.applyTileTheme(isDark, basemap.mode)
                     map.describeForAccessibility(null)
                     map.overlays.clear()
 
@@ -508,19 +519,20 @@ private fun BoundaryMapCard(
                         )
                     }
 
-                    if (!hasCentred.value) {
-                        val box = boundsOf(boundary)
-                        if (box != null) {
-                            map.post { map.zoomToBoundingBox(box, false) }
-                        } else {
-                            map.controller.setZoom(PARCEL_ZOOM - 2.0)
-                            map.controller.setCenter(OsmGeoPoint(land.latitude, land.longitude))
-                        }
+                    // A single point gets a step back from the closest zoom:
+                    // a card this size wants some surroundings in it, not one
+                    // rooftop filling the frame.
+                    if (!hasCentred.value && map.frame(framePoints, PARCEL_ZOOM - 2.0)) {
                         hasCentred.value = true
                     }
                     map.invalidate()
                 }
             )
+
+            // Behind the tap target below, so it is readable but not in the way.
+            // Whoever made these tiles is named wherever they are drawn, and this
+            // card draws them as much as the full screen map does.
+            MapAttribution(basemap.mode, Modifier.align(Alignment.BottomEnd))
 
             // In front of the map, because the MapView consumes touches itself.
             Box(

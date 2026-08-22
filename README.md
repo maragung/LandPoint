@@ -42,11 +42,26 @@ off a survey letter. Corners can be reordered, corrected and deleted one at a
 time — the order is the outline — and once three are in, the area and perimeter
 are worked out and the plot's pin moves to its centroid.
 
-**Map** — every saved location as a marker on an OpenStreetMap view, with mapped
-plots drawn as filled shapes. Tap a marker or a plot to open the record; open a
-record's boundary full screen to see its numbered corners, area and perimeter.
-Tiles you have already viewed stay cached, so a map you loaded at home still
-works in a field with no signal.
+**Map** — every saved location as a marker, with mapped plots drawn as filled
+shapes. Maps fill the screen: no app bar, no bottom bar, just the ground and a
+few floating controls — zoom in and out, jump to where you are standing, fit
+everything back on screen, and change the map style. Tap a marker or a plot to
+open the record; open a record's boundary full screen to see its numbered
+corners, area and perimeter. Tiles you have already viewed stay cached, so a map
+you loaded at home still works in a field with no signal.
+
+**Four map styles**, chosen once and used by every map in the app:
+
+| Style | What it shows | Source |
+| --- | --- | --- |
+| Street | Roads, names, buildings. The default, and the lightest on data. | OpenStreetMap |
+| Satellite | The ground itself — roofs, trees, field edges — so a corner can be checked against something you can see. | Esri World Imagery (Esri, Maxar, Earthstar Geographics) |
+| Terrain | Contours and hill shading, for sloping or terraced land. | OpenTopoMap (CC-BY-SA) |
+| Offline map | A vector map file you imported yourself. The only style that needs no network at all. | your `.map` file |
+
+Aerial imagery is a **visual reference, not evidence**: it is a photograph of one
+day, it can be a year or more old, and a fence built since will not be in it.
+Use it to recognise your land — never to decide where a boundary runs.
 
 **Navigate** — hand off to Google Maps (or any installed maps app), or use the
 built-in compass mode: an arrow that points at the plot with live distance and
@@ -153,7 +168,11 @@ UI → ViewModel → Repository → Room.
 Deliberate choices worth knowing:
 
 - **osmdroid instead of the Google Maps SDK** — no API key to manage, no Play
-  Services dependency, and it opens the door to the offline-tiles feature.
+  Services dependency, and it opens the door to the offline-tiles feature. The
+  aerial and terrain styles are keyless tile servers for the same reason, fetched
+  two tiles at a time with no bulk download and no prefetching: they are somebody
+  else's bandwidth, given freely, and the app credits them on every map it draws
+  them on.
 - **`LocationManager` instead of the fused provider** — same reason: the app
   works on devices without Google services.
 - **Hand-rolled DI (`AppContainer`)** — the graph is small enough that Hilt would

@@ -1,31 +1,25 @@
 package com.landpoint.app.ui.shape
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,31 +36,49 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.landpoint.app.R
+import com.landpoint.app.ui.components.BasemapSheet
+import com.landpoint.app.ui.components.MapAttribution
+import com.landpoint.app.ui.components.MapFitAction
+import com.landpoint.app.ui.components.MapSideControls
+import com.landpoint.app.ui.components.MapStyleAction
+import com.landpoint.app.ui.components.MapTopChrome
 import com.landpoint.app.ui.components.PARCEL_ZOOM
+import com.landpoint.app.ui.components.addScaleBar
 import com.landpoint.app.ui.components.applyTileTheme
-import com.landpoint.app.ui.components.boundsOf
 import com.landpoint.app.ui.components.cornerMarkerIcon
 import com.landpoint.app.ui.components.describeForAccessibility
 import com.landpoint.app.ui.components.drawBoundary
 import com.landpoint.app.ui.components.drawLocationDot
+import com.landpoint.app.ui.components.frame
+import com.landpoint.app.ui.components.rememberBasemapChoice
 import com.landpoint.app.ui.components.rememberLandMapView
+import com.landpoint.app.ui.components.zoomInAStep
+import com.landpoint.app.ui.components.zoomOutAStep
 import com.landpoint.app.util.AreaFormat
+import com.landpoint.app.util.GeoPoint as LandGeoPoint
 import com.landpoint.app.util.GeoUtils
 import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.ScaleBarOverlay
 import kotlin.math.roundToInt
 
 /**
- * The saved boundary of one land, on a full screen map.
+ * How much of the bottom edge the summary card and the attribution take, so the
+ * scale bar can be told to sit above them instead of behind them.
+ */
+private const val SUMMARY_INSET_DP = 140f
+
+/**
+ * The saved boundary of one land, on the whole screen.
  *
  * The thumbnail on the record says *a* shape is stored; this says *which* shape,
  * on the ground, against the surroundings — the check someone makes before
- * trusting the area figure. Read-only: the editor owns the draft and the undo,
- * so the only change offered here is a way back into it.
+ * trusting the area figure. Which is why the map gets every pixel and the chrome
+ * floats over it: an app bar and a bottom bar together would spend a fifth of a
+ * phone screen on decoration, and the ground is the point.
+ *
+ * Read-only: the editor owns the draft and the undo, so the only change offered
+ * here is a way back into it.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LandShapeScreen(
     onBack: () -> Unit,
@@ -80,10 +92,8 @@ fun LandShapeScreen(
     val boundaryColour = MaterialTheme.colorScheme.primary.toArgb()
     val land = state.land
 
-    val mapView = rememberLandMapView(
-        vectorSource = vectorSource,
-        maxZoomWithoutVector = PARCEL_ZOOM
-    )
+    val basemap = rememberBasemapChoice(hasVectorMap = vectorSource != null)
+    val mapView = rememberLandMapView(vectorSource = vectorSource, basemap = basemap.mode)
     val hasCentred = remember(mapView) { mutableStateOf(false) }
 
     // Resolved up here: the overlay block below is not composable, and building
@@ -102,7 +112,6 @@ fun LandShapeScreen(
         }
         if (accuracy == null) coordinates else "$coordinates  $accuracy"
     }
-    val attribution = stringResource(R.string.map_attribution_osm)
 
     // The map spoken as a sentence. The corner coordinates themselves are on the
     // record this screen was opened from, as a numbered list of text, so this
@@ -124,56 +133,32 @@ fun LandShapeScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(land?.name ?: stringResource(R.string.shape_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back)
-                        )
-                    }
-                }
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = {
-                viewModel.refreshLocation()
-                state.currentLocation?.let { (lat, lon) ->
-                    mapView.controller.animateTo(GeoPoint(lat, lon))
-                }
-            }) {
-                Icon(
-                    Icons.Default.MyLocation,
-                    contentDescription = stringResource(R.string.map_my_location)
-                )
-            }
-        },
-        bottomBar = {
-            if (land != null) {
-                ShapeSummary(state = state, onEdit = { onEdit(land.id) })
-            }
-        }
-    ) { padding ->
+    Box(modifier = Modifier.fillMaxSize()) {
         when {
             state.isLoading -> Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) { CircularProgressIndicator() }
 
             land == null -> Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) { Text(stringResource(R.string.detail_missing)) }
 
-            else -> Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            else -> {
+                // The boundary, or the pin of a land that has none: either way
+                // there is something to open the screen on.
+                val framePoints = remember(state.boundary, land.id) {
+                    state.boundary.ifEmpty {
+                        listOf(LandGeoPoint(land.latitude, land.longitude))
+                    }
+                }
+
                 AndroidView(
                     factory = { mapView },
                     modifier = Modifier.fillMaxSize(),
                     update = { map ->
-                        map.applyTileTheme(isDark)
+                        map.applyTileTheme(isDark, basemap.mode)
                         map.describeForAccessibility(mapDescription)
                         map.overlays.clear()
 
@@ -210,54 +195,105 @@ fun LandShapeScreen(
                         }
                         // A boundary is a measurement, so give it a scale to be
                         // read against.
-                        map.overlays.add(ScaleBarOverlay(map).apply { setAlignBottom(true) })
+                        map.addScaleBar(SUMMARY_INSET_DP)
 
-                        if (!hasCentred.value) {
-                            hasCentred.value = centreOnShape(map, state, land.latitude, land.longitude)
+                        if (!hasCentred.value && map.frame(framePoints, PARCEL_ZOOM)) {
+                            hasCentred.value = true
                         }
                         map.invalidate()
                     }
                 )
 
-                if (state.boundary.isEmpty()) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-                        modifier = Modifier.align(Alignment.TopCenter).padding(12.dp)
-                    ) {
-                        Text(
-                            stringResource(R.string.shape_no_boundary),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                        )
+                Column(modifier = Modifier.align(Alignment.TopStart).fillMaxWidth()) {
+                    MapTopChrome(
+                        onBack = onBack,
+                        title = land.name.ifBlank { stringResource(R.string.shape_title) },
+                        actions = {
+                            MapFitAction {
+                                mapView.frame(framePoints, PARCEL_ZOOM, animated = true)
+                            }
+                            MapStyleAction { basemap.showSheet() }
+                        }
+                    )
+
+                    if (state.boundary.isEmpty()) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .padding(horizontal = 12.dp)
+                        ) {
+                            Text(
+                                stringResource(R.string.shape_no_boundary),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            )
+                        }
                     }
                 }
 
-                // The vector maps render OpenStreetMap data under CC-BY-SA, which
-                // obliges us to name the source on screen.
-                if (vectorSource != null) {
-                    Text(
-                        text = attribution,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.75f))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
+                MapSideControls(
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                    onZoomIn = mapView::zoomInAStep,
+                    onZoomOut = mapView::zoomOutAStep,
+                    onMyLocation = {
+                        viewModel.refreshLocation()
+                        state.currentLocation?.let { (lat, lon) ->
+                            mapView.frame(
+                                listOf(LandGeoPoint(lat, lon)),
+                                PARCEL_ZOOM,
+                                animated = true
+                            )
+                        }
+                    }
+                )
+
+                // Attribution and summary share the bottom edge, stacked so
+                // neither has to be squeezed in beside the other.
+                Column(
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    MapAttribution(basemap.mode, Modifier.padding(horizontal = 12.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    ShapeSummary(state = state, onEdit = { onEdit(land.id) })
                 }
             }
+        }
+
+        if (basemap.sheetVisible) {
+            BasemapSheet(
+                current = basemap.mode,
+                hasVectorMap = basemap.hasVectorMap,
+                onPick = basemap::select,
+                onDismiss = basemap::hideSheet
+            )
         }
     }
 }
 
-/** Area, perimeter, corner count — and the way back into the editor. */
+/**
+ * Area, perimeter, corner count — and the way back into the editor.
+ *
+ * A card that floats over the map rather than a bar bolted under it: the ground it
+ * covers is ground the map could have used, so it keeps its own margins and lets
+ * the tiles run past it on every side.
+ */
 @Composable
 private fun ShapeSummary(state: LandShapeUiState, onEdit: () -> Unit) {
-    Surface(tonalElevation = 3.dp) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        shape = MaterialTheme.shapes.large,
+        tonalElevation = 3.dp,
+        shadowElevation = 6.dp
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -301,28 +337,4 @@ private fun ShapeSummary(state: LandShapeUiState, onEdit: () -> Unit) {
             }
         }
     }
-}
-
-/**
- * Frames the boundary, or the land's pin when there is none. Returns false while
- * there is nothing to frame, so the caller keeps trying as data arrives.
- */
-private fun centreOnShape(
-    map: MapView,
-    state: LandShapeUiState,
-    fallbackLat: Double,
-    fallbackLon: Double
-): Boolean {
-    boundsOf(state.boundary)?.let { box ->
-        // Posted because a bounding box cannot be fitted to a view that has not
-        // been measured yet.
-        map.post { map.zoomToBoundingBox(box, false) }
-        return true
-    }
-    val single = state.boundary.firstOrNull()
-    map.controller.setZoom(PARCEL_ZOOM)
-    map.controller.setCenter(
-        GeoPoint(single?.latitude ?: fallbackLat, single?.longitude ?: fallbackLon)
-    )
-    return true
 }

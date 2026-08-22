@@ -169,7 +169,7 @@
     <string name="boundary_pin_centroid">Land pin: %1$s</string>
     <string name="corner_picker_title">Mark the corners</string>
     <string name="corner_picker_tap_hint">Tap the map to place a corner, or tap a line to add one between the two corners it joins. Drag a corner to move it.</string>
-    <string name="corner_picker_no_map">No offline map imported, so the background is blank. Corners, area and your position still work.</string>
+    <string name="corner_picker_online_map">The background comes from the internet. With no signal it stays blank — corners, area and your position still work.</string>
     <string name="corner_picker_use_gps">Use my position</string>
     <string name="corner_picker_done">Use this boundary</string>
     <string name="corner_picker_cancel">Cancel</string>
@@ -497,4 +497,24 @@
     <string name="corner_sheet_edit">Change coordinates</string>
     <string name="corner_sheet_delete">Delete this corner</string>
     <string name="corner_sheet_insert">Insert a corner as %1$d</string>
+    <!-- Map styles: what the tiles under a boundary are drawn from. -->
+    <string name="map_style">Map style</string>
+    <string name="map_style_note">Aerial imagery shows the ground as a camera saw it on one day. Use it to recognise the place — never as evidence of where a boundary runs.</string>
+    <string name="basemap_street">Street map</string>
+    <string name="basemap_street_summary">Roads, place names and buildings. Needs a connection.</string>
+    <string name="basemap_satellite">Satellite</string>
+    <string name="basemap_satellite_summary">Aerial photographs — fields, roofs and trees as they are. Needs a connection.</string>
+    <string name="basemap_terrain">Terrain</string>
+    <string name="basemap_terrain_summary">Contour lines and hill shading, for sloping ground. Needs a connection.</string>
+    <string name="basemap_imported">Offline map</string>
+    <string name="basemap_imported_summary">The map file stored on this phone. Works with no signal.</string>
+    <string name="basemap_imported_missing">Import a .map file in Settings to use this.</string>
+    <!-- Floating map controls. -->
+    <string name="map_zoom_in">Zoom in</string>
+    <string name="map_zoom_out">Zoom out</string>
+    <string name="map_fit">Fit everything on screen</string>
+    <string name="map_attribution_esri">Imagery © Esri, Maxar, Earthstar Geographics</string>
+    <string name="map_attribution_topo">© OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)</string>
+    <string name="corner_picker_show_controls">Show the corner tools</string>
+    <string name="corner_picker_hide_controls">Hide the corner tools, show more map</string>
 </resources>
