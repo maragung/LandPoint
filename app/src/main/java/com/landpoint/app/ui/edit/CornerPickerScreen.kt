@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.landpoint.app.R
 import com.landpoint.app.ui.components.PARCEL_ZOOM
+import com.landpoint.app.ui.components.applyTileTheme
 import com.landpoint.app.ui.components.boundsOf
 import com.landpoint.app.ui.components.cornerMarkerIcon
 import com.landpoint.app.ui.components.drawBoundary
@@ -59,7 +60,6 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.ScaleBarOverlay
-import org.osmdroid.views.overlay.TilesOverlay
 
 /**
  * How close a tap has to be to an outline to count as landing *on* it rather
@@ -163,9 +163,7 @@ fun CornerPickerScreen(
                     factory = { mapView },
                     modifier = Modifier.fillMaxSize(),
                     update = { map ->
-                        map.overlayManager.tilesOverlay.setColorFilter(
-                            if (isDark) TilesOverlay.INVERT_COLORS else null
-                        )
+                        map.applyTileTheme(isDark)
                         map.overlays.clear()
                         addTaplistener(map, edgeTouchPx, onTapCorner)
                         map.drawBoundary(state.draftPoints, shapeColor)

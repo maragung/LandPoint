@@ -30,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.landpoint.app.R
 import com.landpoint.app.data.model.Land
+import com.landpoint.app.ui.components.applyTileTheme
 import com.landpoint.app.ui.components.boundsOf
 import com.landpoint.app.ui.components.drawBoundary
 import com.landpoint.app.ui.components.drawLocationDot
@@ -38,7 +39,6 @@ import com.landpoint.app.util.GeoPoint as LandGeoPoint
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.TilesOverlay
 
 /** Where a single record sits comfortably on screen with its surroundings. */
 private const val SINGLE_LAND_ZOOM = 16.0
@@ -103,9 +103,7 @@ fun MapScreen(
                 factory = { mapView },
                 modifier = Modifier.fillMaxSize(),
                 update = { map ->
-                    map.overlayManager.tilesOverlay.setColorFilter(
-                        if (isDark) TilesOverlay.INVERT_COLORS else null
-                    )
+                    map.applyTileTheme(isDark)
 
                     map.overlays.clear()
 

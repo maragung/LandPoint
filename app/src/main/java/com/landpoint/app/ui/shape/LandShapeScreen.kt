@@ -43,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.landpoint.app.R
 import com.landpoint.app.ui.components.PARCEL_ZOOM
+import com.landpoint.app.ui.components.applyTileTheme
 import com.landpoint.app.ui.components.boundsOf
 import com.landpoint.app.ui.components.cornerMarkerIcon
 import com.landpoint.app.ui.components.drawBoundary
@@ -54,7 +55,6 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.ScaleBarOverlay
-import org.osmdroid.views.overlay.TilesOverlay
 import kotlin.math.roundToInt
 
 /**
@@ -152,9 +152,7 @@ fun LandShapeScreen(
                     factory = { mapView },
                     modifier = Modifier.fillMaxSize(),
                     update = { map ->
-                        map.overlayManager.tilesOverlay.setColorFilter(
-                            if (isDark) TilesOverlay.INVERT_COLORS else null
-                        )
+                        map.applyTileTheme(isDark)
                         map.overlays.clear()
 
                         map.drawBoundary(state.boundary, boundaryColour)

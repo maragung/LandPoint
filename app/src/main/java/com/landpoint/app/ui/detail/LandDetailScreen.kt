@@ -74,6 +74,7 @@ import com.landpoint.app.data.model.Photo
 import androidx.compose.ui.res.pluralStringResource
 import com.landpoint.app.ui.components.LandShapeThumb
 import com.landpoint.app.ui.components.PARCEL_ZOOM
+import com.landpoint.app.ui.components.applyTileTheme
 import com.landpoint.app.ui.components.boundsOf
 import com.landpoint.app.ui.components.cornerMarkerIcon
 import com.landpoint.app.ui.components.drawBoundary
@@ -86,7 +87,6 @@ import com.landpoint.app.util.ShareUtils
 import org.osmdroid.mapsforge.MapsForgeTileSource
 import org.osmdroid.util.GeoPoint as OsmGeoPoint
 import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.TilesOverlay
 import kotlin.math.roundToInt
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -465,9 +465,7 @@ private fun BoundaryMapCard(
                 factory = { mapView },
                 modifier = Modifier.fillMaxSize(),
                 update = { map ->
-                    map.overlayManager.tilesOverlay.setColorFilter(
-                        if (isDark) TilesOverlay.INVERT_COLORS else null
-                    )
+                    map.applyTileTheme(isDark)
                     map.overlays.clear()
 
                     map.drawBoundary(boundary, boundaryColour)

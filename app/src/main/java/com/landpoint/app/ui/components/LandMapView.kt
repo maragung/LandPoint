@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color as AndroidColor
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
@@ -14,6 +15,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import com.landpoint.app.util.GeoPoint as LandGeoPoint
+import com.landpoint.app.util.NightTiles
 import org.osmdroid.mapsforge.MapsForgeTileProvider
 import org.osmdroid.mapsforge.MapsForgeTileSource
 import org.osmdroid.tileprovider.modules.SqlTileWriter
@@ -108,6 +110,20 @@ fun rememberLandMapView(
 
     return mapView
 }
+
+/**
+ * Recolours the tiles for the theme in force, and puts them back for a light one.
+ *
+ * Every map in the app calls this, because there is one set of tiles and they are
+ * drawn for daylight — see [NightTiles] for what the recolouring does and why
+ * osmdroid's own `INVERT_COLORS` was not enough.
+ */
+fun MapView.applyTileTheme(dark: Boolean) {
+    overlayManager.tilesOverlay.setColorFilter(if (dark) nightTileFilter else null)
+}
+
+/** One filter for the whole app: it holds nothing but the matrix. */
+private val nightTileFilter by lazy { ColorMatrixColorFilter(NightTiles.MATRIX) }
 
 /**
  * A boundary as it stands: a filled ring once it closes, a bare line before that.
