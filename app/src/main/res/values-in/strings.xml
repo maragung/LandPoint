@@ -76,6 +76,24 @@
     <string name="permission_title">Izin lokasi diperlukan</string>
     <string name="permission_body">LandPoint memerlukan akses lokasi untuk mengambil koordinat GPS. Tidak ada data yang keluar dari perangkat Anda.</string>
     <string name="permission_grant">Beri izin</string>
+    <string name="permission_blocked_body">Android tidak akan menanyakannya lagi. Izin ini harus dinyalakan untuk LandPoint di setelan sistem.</string>
+    <string name="permission_open_settings">Buka setelan</string>
+    <string name="settings_show_intro">Tampilkan perkenalan lagi</string>
+
+    <!-- Pemakaian pertama -->
+    <string name="onboarding_skip">Lewati</string>
+    <string name="onboarding_next">Lanjut</string>
+    <string name="onboarding_start">Mulai</string>
+    <string name="onboarding_welcome_title">Tanah Anda, tercatat</string>
+    <string name="onboarding_welcome_body">LandPoint menyimpan catatan setiap bidang tanah Anda: letaknya, bentuk batasnya, luasnya, serta foto dan dokumen pendukungnya. Tidak perlu sinyal — semuanya tersimpan di ponsel ini.</string>
+    <string name="onboarding_measure_title">Ukur batasnya</string>
+    <string name="onboarding_measure_body">Rekam tiap sudut dari GPS sambil berdiri di titiknya, ketuk sudutnya di peta, ukur sambil berjalan mengelilingi, atau ketikkan koordinat langsung dari sertifikat. Ketelitian setiap sudut yang diukur ikut tersimpan, jadi Anda tahu sudut mana yang perlu diukur ulang.</string>
+    <string name="onboarding_private_title">Tidak ada data yang keluar</string>
+    <string name="onboarding_private_body">Tidak ada akun dan tidak ada server. Artinya juga tidak ada salinan di tempat lain: kalau ponsel ini hilang, catatannya ikut hilang. Buatlah cadangan dari Setelan secara berkala, dan nyalakan kunci aplikasi bila ponsel ini dipakai orang lain.</string>
+    <string name="onboarding_location_title">Izin lokasi</string>
+    <string name="onboarding_location_body">GPS-lah yang memberi koordinat pada sebuah sudut, dan yang menampilkan posisi Anda sendiri di peta saat mengukur.</string>
+    <string name="onboarding_location_granted">Izin lokasi sudah diberikan.</string>
+    <string name="onboarding_location_later">Anda boleh menolak dulu: koordinat masih bisa diketik atau ditandai di peta, dan daftar lahan akan menawarkannya lagi saat dibutuhkan.</string>
 
     <!-- Editor -->
     <string name="edit_title_new">Simpan tanah</string>

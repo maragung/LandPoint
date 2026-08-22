@@ -27,6 +27,7 @@ class SettingsRepository(private val context: Context) {
         val APP_LOCK = booleanPreferencesKey("app_lock")
         val SECURE_SCREEN = booleanPreferencesKey("secure_screen")
         val STRIP_PHOTO_LOCATION = booleanPreferencesKey("strip_photo_location")
+        val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
     }
 
     /**
@@ -163,6 +164,21 @@ class SettingsRepository(private val context: Context) {
             secureScreen = it[Keys.SECURE_SCREEN] ?: false,
             stripPhotoLocation = it[Keys.STRIP_PHOTO_LOCATION] ?: true
         )
+    }
+
+    /**
+     * Whether the introduction has been through once.
+     *
+     * Absent means a first run, which is what shows it — so this flow must never
+     * be given a default of true anywhere it is collected, or the one screen that
+     * explains where the records are kept is the one nobody sees.
+     */
+    val onboardingDone: Flow<Boolean> = context.settingsDataStore.data.map {
+        it[Keys.ONBOARDING_DONE] ?: false
+    }
+
+    suspend fun setOnboardingDone(done: Boolean) = context.settingsDataStore.edit {
+        it[Keys.ONBOARDING_DONE] = done
     }
 
     suspend fun setLanguage(language: Language) = context.settingsDataStore.edit {

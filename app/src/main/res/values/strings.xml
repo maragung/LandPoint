@@ -80,6 +80,24 @@
     <string name="permission_title">Location permission needed</string>
     <string name="permission_body">LandPoint needs location access to capture GPS coordinates. Nothing leaves your device.</string>
     <string name="permission_grant">Grant permission</string>
+    <string name="permission_blocked_body">Android will not ask again. The permission has to be switched on for LandPoint in the system settings.</string>
+    <string name="permission_open_settings">Open settings</string>
+    <string name="settings_show_intro">Show the introduction again</string>
+
+    <!-- First run -->
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_start">Start</string>
+    <string name="onboarding_welcome_title">Your land, recorded</string>
+    <string name="onboarding_welcome_body">LandPoint keeps a record of each parcel you own: where it is, the shape of its boundary, the area it covers, and the photos and documents that belong with it. It needs no signal — everything is kept on this phone.</string>
+    <string name="onboarding_measure_title">Measure the boundary</string>
+    <string name="onboarding_measure_body">Record each corner from GPS as you stand on it, tap the corners on the map, walk the perimeter, or type coordinates straight off a certificate. The accuracy of every measured corner is kept with it, so you can see which ones are worth going back to.</string>
+    <string name="onboarding_private_title">Nothing leaves this phone</string>
+    <string name="onboarding_private_body">There is no account and no server. That also means no copy anywhere else: if this phone is lost, the records go with it. Make a backup from Settings now and then, and turn on the app lock if others use the phone.</string>
+    <string name="onboarding_location_title">Location permission</string>
+    <string name="onboarding_location_body">GPS is what gives a corner its coordinates, and what puts your own position on the map while you measure.</string>
+    <string name="onboarding_location_granted">Location permission granted.</string>
+    <string name="onboarding_location_later">You can refuse for now: coordinates can still be typed in or tapped on the map, and the land list will offer this again when you need it.</string>
 
     <!-- Editor -->
     <string name="edit_title_new">Save land</string>

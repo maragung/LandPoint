@@ -159,6 +159,17 @@ class SettingsViewModel(
         viewModelScope.launch { settings.setSecureScreen(enabled) }
     }
 
+    /**
+     * Puts the first-run introduction back.
+     *
+     * It says where the records are kept and that nothing is copied off the phone
+     * — worth being able to re-read, and worth being able to show to whoever is
+     * handed the phone next.
+     */
+    fun replayOnboarding() {
+        viewModelScope.launch { settings.setOnboardingDone(false) }
+    }
+
     fun setStripPhotoLocation(enabled: Boolean) {
         viewModelScope.launch { settings.setStripPhotoLocation(enabled) }
     }

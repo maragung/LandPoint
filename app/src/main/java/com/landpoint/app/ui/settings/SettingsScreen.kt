@@ -458,6 +458,11 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                ActionRow(
+                    label = stringResource(R.string.settings_show_intro),
+                    enabled = true,
+                    onClick = viewModel::replayOnboarding
+                )
             }
         }
     }

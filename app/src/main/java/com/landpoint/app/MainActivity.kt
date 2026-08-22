@@ -14,11 +14,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import com.landpoint.app.data.SettingsRepository
 import com.landpoint.app.ui.LandPointNavHost
+import com.landpoint.app.ui.onboarding.OnboardingScreen
 import com.landpoint.app.ui.security.AppLockGate
 import com.landpoint.app.ui.theme.LandPointTheme
 import com.landpoint.app.util.Localization
+import kotlinx.coroutines.launch
 
 /**
  * A [FragmentActivity] rather than a plain ComponentActivity because the app lock
@@ -45,6 +48,12 @@ class MainActivity : FragmentActivity() {
             )
             // Null until read from disk, and deliberately not defaulted: see below.
             val privacy by settings.privacy.collectAsStateWithLifecycle(initialValue = null)
+            // Also null until read, for the opposite reason: defaulting to "not
+            // yet seen" would flash the introduction at every existing user on
+            // every cold start.
+            val onboarded by settings.onboardingDone.collectAsStateWithLifecycle(
+                initialValue = null
+            )
 
             DisposableEffect(privacy?.secureScreen) {
                 if (privacy?.secureScreen == true) {
@@ -70,7 +79,28 @@ class MainActivity : FragmentActivity() {
                     // the land map to whoever is holding the phone — which is the
                     // one thing the lock exists to prevent.
                     privacy?.let { flags ->
-                        AppLockGate(enabled = flags.appLock) { LandPointNavHost() }
+                        AppLockGate(enabled = flags.appLock) {
+                            // Inside the gate, not before it: an introduction is
+                            // no reason to show what the lock is there to keep
+                            // shut, and on a first run there is nothing behind it
+                            // to unlock anyway.
+                            when (onboarded) {
+                                null -> Surface(
+                                    modifier = Modifier.fillMaxSize(),
+                                    content = {}
+                                )
+
+                                false -> OnboardingScreen(
+                                    onFinish = {
+                                        lifecycleScope.launch {
+                                            settings.setOnboardingDone(true)
+                                        }
+                                    }
+                                )
+
+                                else -> LandPointNavHost()
+                            }
+                        }
                     } ?: Surface(modifier = Modifier.fillMaxSize(), content = {})
                 }
             }

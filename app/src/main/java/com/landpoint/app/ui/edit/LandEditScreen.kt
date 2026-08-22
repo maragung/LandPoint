@@ -89,6 +89,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.landpoint.app.R
 import com.landpoint.app.data.SettingsRepository
 import com.landpoint.app.location.FixQuality
+import com.landpoint.app.ui.components.rememberLocationPermission
 import com.landpoint.app.util.AreaFormat
 import com.landpoint.app.util.BoundaryEdits
 import com.landpoint.app.util.GeoPoint
@@ -110,6 +111,31 @@ fun LandEditScreen(
     val noPickerMessage = stringResource(R.string.msg_photo_import_failed)
 
     var pendingCapture by remember { mutableStateOf<File?>(null) }
+
+    // A GPS action taken without the permission used to end at a snackbar saying
+    // the permission was missing — true, and no help, since nothing on this screen
+    // could ask for it. Now the request goes up, and the action the user actually
+    // pressed runs the moment it is granted instead of having to be found again.
+    var pendingLocationAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val permission = rememberLocationPermission(
+        onGranted = {
+            pendingLocationAction?.invoke()
+            pendingLocationAction = null
+        }
+    )
+    val blockedMessage = stringResource(R.string.permission_blocked_body)
+    val withLocation: (() -> Unit) -> Unit = { action ->
+        when {
+            permission.isGranted -> action()
+            // Asking again would be a button that does nothing: the system has
+            // stopped putting the dialog up. Say where the switch lives instead.
+            permission.isBlocked -> viewModel.showMessage(blockedMessage)
+            else -> {
+                pendingLocationAction = action
+                permission.request()
+            }
+        }
+    }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
@@ -152,7 +178,7 @@ fun LandEditScreen(
             onMoveCorner = viewModel::moveDraftCorner,
             onSelectCorner = viewModel::selectDraftCorner,
             onDeleteSelected = viewModel::removeSelectedDraftCorner,
-            onUseGps = viewModel::captureDraftCornerFromGps,
+            onUseGps = { withLocation(viewModel::captureDraftCornerFromGps) },
             onUndo = viewModel::undoDraftCorner,
             onClear = viewModel::clearDraftCorners,
             onDone = viewModel::commitCornerPicker,
@@ -230,7 +256,7 @@ fun LandEditScreen(
                     state = state,
                     onLatitudeChange = viewModel::setLatitude,
                     onLongitudeChange = viewModel::setLongitude,
-                    onCapture = viewModel::captureLocation,
+                    onCapture = { withLocation(viewModel::captureLocation) },
                     onLookupAddress = viewModel::lookupAddress
                 )
             }
@@ -240,11 +266,11 @@ fun LandEditScreen(
             FormSection {
                 BoundarySection(
                     state = state,
-                    onAddCorner = viewModel::addBoundaryPoint,
+                    onAddCorner = { withLocation(viewModel::addBoundaryPoint) },
                     onPickOnMap = viewModel::openCornerPicker,
                     onUndo = viewModel::undoBoundaryPoint,
                     onClear = viewModel::clearBoundary,
-                    onStartWalk = viewModel::startWalk,
+                    onStartWalk = { withLocation(viewModel::startWalk) },
                     onStopWalk = viewModel::stopWalk,
                     onAddManual = viewModel::addBoundaryPointManual,
                     onUpdateCorner = viewModel::updateBoundaryPoint,
