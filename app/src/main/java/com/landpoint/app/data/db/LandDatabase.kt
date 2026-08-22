@@ -27,9 +27,18 @@ abstract class LandDatabase : RoomDatabase() {
                 instance ?: build(context).also { instance = it }
             }
 
-        private fun build(context: Context): LandDatabase =
-            Room.databaseBuilder(context.applicationContext, LandDatabase::class.java, NAME)
+        private fun build(context: Context): LandDatabase {
+            val app = context.applicationContext
+            return Room.databaseBuilder(app, LandDatabase::class.java, NAME)
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
+                .apply {
+                    // Null on a phone that cannot manage encryption at all, which
+                    // leaves Room on its own opener rather than leaving the user
+                    // unable to reach their own records. Settings reports which of
+                    // the two happened.
+                    DatabaseCipher.factoryFor(app, NAME)?.let(::openHelperFactory)
+                }
                 .build()
+        }
     }
 }

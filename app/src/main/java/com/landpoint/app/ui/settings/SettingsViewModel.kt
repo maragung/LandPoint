@@ -13,6 +13,8 @@ import com.landpoint.app.data.OfflineArchive
 import com.landpoint.app.data.OfflineMapStore
 import com.landpoint.app.data.SettingsRepository
 import com.landpoint.app.data.UnsupportedType
+import com.landpoint.app.data.db.DatabaseCipher
+import com.landpoint.app.data.db.DatabaseStorage
 import com.landpoint.app.data.export.BackupManager
 import com.landpoint.app.data.export.DuplicateStrategy
 import com.landpoint.app.data.export.ImportExportManager
@@ -68,6 +70,14 @@ private data class OfflineState(
 class SettingsViewModel(
     private val settings: SettingsRepository,
     private val repository: LandRepository,
+    /**
+     * Whether the records on this phone are actually encrypted.
+     *
+     * Its own flow rather than a field of [SettingsUiState]: `uiState` is already at
+     * combine()'s five-flow limit, and this belongs to the storage layer rather than
+     * to anything the user set here.
+     */
+    val storage: StateFlow<DatabaseStorage>,
     private val importExport: ImportExportManager,
     private val backupManager: BackupManager,
     private val pdfExporter: PdfExporter,
@@ -362,7 +372,11 @@ class SettingsViewModel(
                 val c = container()
                 SettingsViewModel(
                     c.settings,
+                    // Read after the repository on purpose: resolving that is what
+                    // builds the database, and until it is built there is nothing
+                    // to report about how it is stored.
                     c.repository,
+                    DatabaseCipher.storage,
                     c.importExport,
                     c.backupManager,
                     c.pdfExporter,

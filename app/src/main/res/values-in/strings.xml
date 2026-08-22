@@ -443,7 +443,12 @@
 
     <!-- Privasi dan keamanan -->
     <string name="settings_section_privacy">Privasi dan keamanan</string>
-    <string name="settings_privacy_no_cloud">Data lahan dan foto tetap di HP ini. Tidak disalin ke backup cloud Google — pakai Backup di bawah untuk menyimpan salinan yang Anda kendalikan. HP baru tetap bisa menerima semuanya lewat transfer langsung antar-perangkat Android.</string>
+    <string name="settings_privacy_no_cloud">Data lahan dan foto tetap di HP ini. Tidak disalin ke backup cloud Google, dan juga tidak ikut lewat transfer langsung antar-perangkat Android — pakai Backup di bawah untuk menyimpan salinan yang Anda kendalikan sekaligus untuk pindah ke HP baru.</string>
+    <string name="settings_db_encrypted">Data terenkripsi di HP ini</string>
+    <string name="settings_db_encrypted_hint">Koordinat, nama, dan catatan disimpan terenkripsi dengan kunci yang tersimpan di perangkat keras HP ini dan terikat padanya. Foto tetap di penyimpanan privat aplikasi. Karena kunci itu tidak bisa keluar dari HP ini, HP baru hanya bisa menerima data Anda lewat arsip backup — buat arsipnya sebelum pindah HP.</string>
+    <string name="settings_db_not_encrypted">Data tidak terenkripsi</string>
+    <string name="settings_db_not_encrypted_hint">HP ini tidak bisa menyiapkan enkripsi, jadi data disimpan sebagai berkas database biasa. Data tetap privat untuk aplikasi ini kecuali HP di-root, dan tidak ada yang hilang.</string>
+    <string name="settings_db_parked">Sebuah database lama tidak bisa didekripsi dan disisihkan sebagai %1$s di penyimpanan privat aplikasi. Tanpa kunci lamanya berkas itu tidak bisa dibuka. Pulihkan dari arsip backup bila Anda punya.</string>
     <string name="settings_strip_photo_location">Hapus lokasi foto saat dibagikan</string>
     <string name="settings_strip_photo_location_hint">Salinan yang dibagikan kehilangan tag GPS-nya. Koordinat yang tercetak di gambar tetap terbaca, dan foto yang tersimpan di sini tidak diubah.</string>
     <string name="settings_app_lock">Kunci aplikasi</string>

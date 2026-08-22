@@ -463,7 +463,12 @@
 
     <!-- Privacy and security -->
     <string name="settings_section_privacy">Privacy and security</string>
-    <string name="settings_privacy_no_cloud">Land records and photos stay on this phone. They are not copied into Google cloud backup — use Backup below to keep a copy you control. A new phone can still receive everything through Android\'s device-to-device transfer.</string>
+    <string name="settings_privacy_no_cloud">Land records and photos stay on this phone. They are not copied into Google cloud backup, and they do not travel through Android\'s device-to-device transfer either — use Backup below both to keep a copy you control and to move to a new phone.</string>
+    <string name="settings_db_encrypted">Records encrypted on this phone</string>
+    <string name="settings_db_encrypted_hint">Coordinates, names and notes are stored encrypted, with a key held in this phone\'s hardware and locked to it. Photos stay in the app\'s private storage. Because the key cannot leave this phone, a new phone can only receive your records through a backup archive — make one before you change phones.</string>
+    <string name="settings_db_not_encrypted">Records not encrypted</string>
+    <string name="settings_db_not_encrypted_hint">This phone could not set up encryption, so records are stored as an ordinary database file. They stay private to the app unless the phone is rooted, and nothing has been lost.</string>
+    <string name="settings_db_parked">A database from before could not be decrypted and was set aside as %1$s in the app\'s private storage. Without its old key nothing can open it. Restore from a backup archive if you have one.</string>
     <string name="settings_strip_photo_location">Remove photo location when sharing</string>
     <string name="settings_strip_photo_location_hint">Shared copies lose their GPS tags. The coordinates stamped onto the picture stay readable, and the photo stored here is untouched.</string>
     <string name="settings_app_lock">Lock the app</string>

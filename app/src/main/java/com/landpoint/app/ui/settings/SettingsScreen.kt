@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
@@ -16,6 +17,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -60,6 +63,7 @@ import com.landpoint.app.BuildConfig
 import com.landpoint.app.R
 import com.landpoint.app.data.MapKind
 import com.landpoint.app.data.SettingsRepository
+import com.landpoint.app.data.db.DatabaseStorage
 import com.landpoint.app.data.export.BackupManager
 import com.landpoint.app.data.export.DuplicateStrategy
 import com.landpoint.app.ui.security.AppLockState
@@ -77,6 +81,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val storage by viewModel.storage.collectAsStateWithLifecycle()
     val snackbarHost = remember { SnackbarHostState() }
     val uriHandler = LocalUriHandler.current
     val noBrowserMessage = stringResource(R.string.msg_no_browser_app)
@@ -235,6 +240,7 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                StorageStatus(storage)
                 SwitchRow(
                     label = stringResource(R.string.settings_strip_photo_location),
                     hint = stringResource(R.string.settings_strip_photo_location_hint),
@@ -765,4 +771,60 @@ private fun formatBytes(bytes: Long): String = when {
     bytes < 1024L * 1024 * 1024 ->
         String.format(java.util.Locale.US, "%.1f MB", bytes / (1024.0 * 1024))
     else -> String.format(java.util.Locale.US, "%.2f GB", bytes / (1024.0 * 1024 * 1024))
+}
+
+/**
+ * What the app has actually managed to do about encryption, said plainly.
+ *
+ * Not a switch: there is nothing to decide here. Encryption is either working or it
+ * is not, and the honest thing is to say which — an app that claims to protect
+ * records it left in the clear is worse than one that admits it.
+ *
+ * The trade-off it warns about is real and unavoidable. The key lives in this
+ * phone's hardware keystore, which cannot export it, so a new phone cannot read
+ * these files no matter what. The archive is the only way across, and someone finds
+ * that out either here or on the day they lose the phone.
+ */
+@Composable
+private fun StorageStatus(storage: DatabaseStorage) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector =
+                    if (storage.encrypted) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint =
+                    if (storage.encrypted) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.error
+            )
+            Text(
+                stringResource(
+                    if (storage.encrypted) R.string.settings_db_encrypted
+                    else R.string.settings_db_not_encrypted
+                ),
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+        Text(
+            stringResource(
+                if (storage.encrypted) R.string.settings_db_encrypted_hint
+                else R.string.settings_db_not_encrypted_hint
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        // Somebody has lost records. Saying where the file went is the only useful
+        // thing left to offer, so it is spelled out rather than summarised.
+        storage.parked?.let { name ->
+            Text(
+                stringResource(R.string.settings_db_parked, name),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+    }
 }

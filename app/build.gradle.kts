@@ -69,6 +69,13 @@ android {
 
     packaging {
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}")
+        // SQLCipher ships a native library for four ABIs — 23 MB stored raw, 10 MB
+        // compressed. AGP 8 defaults to raw so the installer can mmap straight out
+        // of the APK, which is the right trade for a Play download that strips the
+        // other three ABIs on the way to the phone. This APK is sideloaded whole,
+        // over whatever connection the user has, so the 13 MB matters more than the
+        // handful of milliseconds saved at install time.
+        jniLibs.useLegacyPackaging = true
     }
 
     testOptions {
@@ -120,6 +127,9 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
+    // Encrypts the database at rest. Consumer ProGuard rules come with the AAR, so
+    // R8 keeps the native entry points without anything added here.
+    implementation(libs.sqlcipher.android)
 
     implementation(libs.androidx.datastore.preferences)
     // Back-ports the Android 12 splash screen to Android 9, which is most of the

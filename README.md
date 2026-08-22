@@ -96,8 +96,33 @@ Everything stays on the phone.
 - Internet access is used for one thing: downloading OpenStreetMap map tiles.
   Skip the map screen and the app never touches the network.
 
-Uninstalling the app deletes all of its data. **Export a backup first if you want
-to keep your locations.**
+### Encryption at rest
+
+The database — coordinates, names, addresses, notes — is encrypted with SQLCipher.
+The key is 32 random bytes wrapped by an AES key that lives in the phone's
+hardware keystore (StrongBox where the phone has one), so it is never written to
+disk in a usable form and never leaves the device. Photos are not in the database;
+they stay in the app's private storage, reachable only by the app or by root.
+
+An existing unencrypted database is migrated on the first launch after updating.
+The migration copies rather than converts, verifies the row counts through the new
+key, and only then replaces the old file — a failure at any point leaves the
+original untouched and the app carries on reading it.
+
+A phone that cannot manage encryption at all — no SQLCipher build for its ABI, or
+a keystore that refuses to produce a key — opens the database unencrypted rather
+than refusing to start. Settings › Privacy and security says which of the two is
+happening, and it is worth checking once.
+
+**The trade-off, stated plainly:** a key locked to one phone's hardware cannot be
+exported, so the database cannot be carried to a new phone. Android's
+device-to-device transfer no longer copies it, because delivering a file the new
+phone could never open would look like a successful transfer and would not be one.
+Uninstalling deletes everything too.
+
+**A backup archive is the only way off this phone. Make one before you change
+phones, and before you uninstall.** Archives hold JSON and photo files rather than
+the database, so they open on any device.
 
 ---
 

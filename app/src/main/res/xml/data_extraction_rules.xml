@@ -8,9 +8,17 @@
   archive (Settings > Backup) is the supported way off the device, because the
   user picks where that file goes.
 
-  Device transfer keeps everything: moving to a new phone is precisely the case
-  where losing the data is the whole problem, and the copy never leaves the two
-  devices involved.
+  Device transfer no longer carries the records either, and that is a real cost
+  stated plainly rather than worked around. The database is encrypted with a key
+  held in this phone's hardware keystore, which by design cannot be exported or
+  transferred. Copying the database to a new phone would therefore deliver a file
+  nothing on it can ever open — and copying the photographs without it would
+  leave images belonging to records that are gone. A new phone starting clean and
+  restoring from an archive is worse than a seamless transfer, but far better
+  than a transfer that appears to work and has not.
+
+  Settings are still carried across, minus the wrapped database key: it is
+  meaningless without the keystore key that never left the old phone.
 -->
 <data-extraction-rules>
     <cloud-backup>
@@ -21,8 +29,7 @@
         <exclude domain="external" path="." />
     </cloud-backup>
     <device-transfer>
-        <include domain="database" path="." />
-        <include domain="file" path="images" />
         <include domain="sharedpref" path="." />
+        <exclude domain="sharedpref" path="landpoint.database.key.xml" />
     </device-transfer>
 </data-extraction-rules>
