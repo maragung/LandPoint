@@ -122,6 +122,9 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     implementation(libs.androidx.datastore.preferences)
+    // Back-ports the Android 12 splash screen to Android 9, which is most of the
+    // phones this app targets.
+    implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.exifinterface)
     // Fingerprint or screen-lock confirmation for the app lock. Pulls in
     // androidx.fragment, which is why MainActivity is a FragmentActivity.

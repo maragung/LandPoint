@@ -7,8 +7,7 @@
 
       windowBackground is the point of this file: without it the window is white
       until Compose draws, which flashes on every launch in dark mode. The night
-      variant in values-night/ supplies the dark counterpart. No splash-screen
-      library is involved.
+      variant in values-night/ supplies the dark counterpart.
     -->
     <style name="Theme.LandPoint" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/window_background</item>
@@ -18,6 +17,29 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
+    <!--
+      The theme the launcher starts, handed over to Theme.LandPoint by
+      installSplashScreen() as the Activity is created.
+
+      Android 12 and newer show a splash built from the launcher icon whether one
+      is asked for or not; declaring it here is what makes Android 9 to 11 — most
+      of the phones this app is for — show the same thing rather than a bare
+      coloured window. Brand green with the white pin on it, so what the launcher
+      was showing a moment ago is what grows into the app.
+
+      One colour for light and dark alike: white on this green is legible either
+      way, so there is no night variant to keep in step. The attribute names carry
+      no android: prefix on purpose — they are the library's own, and it forwards
+      them to the framework ones on Android 12 and newer.
+    -->
+    <style name="Theme.LandPoint.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.LandPoint</item>
+        <!-- Status icons in white, over a dark green. -->
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 
 </resources>
