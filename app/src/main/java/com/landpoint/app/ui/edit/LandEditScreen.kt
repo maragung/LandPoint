@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -45,6 +47,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -672,6 +675,7 @@ private fun CornerList(
     onMoveDown: (Int) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var sheetFor by remember { mutableStateOf<Int?>(null) }
     val collapsedCount = 10
     val shown = if (expanded) boundary.size else minOf(boundary.size, collapsedCount)
 
@@ -683,12 +687,23 @@ private fun CornerList(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        if (boundary.isNotEmpty()) {
+            Text(
+                stringResource(R.string.boundary_corner_tap_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
         for (index in 0 until shown) {
             val point = boundary[index]
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(enabled = enabled) { sheetFor = index }
             ) {
                 Text(
                     stringResource(
@@ -698,7 +713,9 @@ private fun CornerList(
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 4.dp)
                 )
                 CornerAction(
                     icon = Icons.Default.ArrowUpward,
@@ -712,18 +729,6 @@ private fun CornerList(
                     enabled = enabled && index < boundary.size - 1,
                     onClick = { onMoveDown(index) }
                 )
-                CornerAction(
-                    icon = Icons.Outlined.Edit,
-                    description = stringResource(R.string.boundary_corner_edit, index + 1),
-                    enabled = enabled,
-                    onClick = { onEdit(index) }
-                )
-                CornerAction(
-                    icon = Icons.Outlined.Delete,
-                    description = stringResource(R.string.boundary_corner_delete, index + 1),
-                    enabled = enabled,
-                    onClick = { onRemove(index) }
-                )
             }
         }
 
@@ -736,9 +741,33 @@ private fun CornerList(
             }
         }
     }
+
+    // Nothing is rendered once the corner is gone from under an open sheet —
+    // Clear, or a walk rewriting the ring, can both do that.
+    sheetFor?.takeIf { it in boundary.indices }?.let { index ->
+        CornerActionsSheet(
+            number = index + 1,
+            onDismiss = { sheetFor = null },
+            onEdit = {
+                sheetFor = null
+                onEdit(index)
+            },
+            onRemove = {
+                sheetFor = null
+                onRemove(index)
+            }
+        )
+    }
 }
 
-/** Four of these fit beside a coordinate only at this size. */
+/**
+ * Reordering is frequent and shallow, so it stays on the row; editing and
+ * deleting are rarer and consequential, so they moved into [CornerActionsSheet].
+ *
+ * The previous version fitted four of these beside a coordinate by shrinking
+ * them to 36dp — under Material's 48dp minimum, on a row where the neighbouring
+ * button deletes a surveyed corner.
+ */
 @Composable
 private fun CornerAction(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -746,8 +775,68 @@ private fun CornerAction(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(36.dp)) {
-        Icon(icon, contentDescription = description, modifier = Modifier.size(18.dp))
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(48.dp)) {
+        Icon(icon, contentDescription = description, modifier = Modifier.size(20.dp))
+    }
+}
+
+/** What tapping a corner offers: the actions that do not belong on a 48dp row. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CornerActionsSheet(
+    number: Int,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onRemove: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = 12.dp)
+        ) {
+            Text(
+                stringResource(R.string.corner_sheet_title, number),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+            )
+            SheetAction(
+                icon = Icons.Outlined.Edit,
+                label = stringResource(R.string.corner_sheet_edit),
+                onClick = onEdit
+            )
+            SheetAction(
+                icon = Icons.Outlined.Delete,
+                label = stringResource(R.string.corner_sheet_delete),
+                destructive = true,
+                onClick = onRemove
+            )
+        }
+    }
+}
+
+@Composable
+private fun SheetAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    destructive: Boolean = false
+) {
+    val colour =
+        if (destructive) MaterialTheme.colorScheme.error
+        else MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 24.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = colour)
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = colour)
     }
 }
 

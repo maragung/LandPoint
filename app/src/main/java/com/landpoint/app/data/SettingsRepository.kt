@@ -24,6 +24,9 @@ class SettingsRepository(private val context: Context) {
         val LANGUAGE = stringPreferencesKey("language")           // system | en | in
         val AREA_UNIT = stringPreferencesKey("area_unit")         // AreaUnit.key
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
+        val APP_LOCK = booleanPreferencesKey("app_lock")
+        val SECURE_SCREEN = booleanPreferencesKey("secure_screen")
+        val STRIP_PHOTO_LOCATION = booleanPreferencesKey("strip_photo_location")
     }
 
     /**
@@ -131,6 +134,37 @@ class SettingsRepository(private val context: Context) {
         it[Keys.DYNAMIC_COLOR] ?: false
     }
 
+    /**
+     * The privacy switches, delivered as one value.
+     *
+     * They travel together because `combine` accepts five flows and the settings
+     * screen already spends all five; one flow for the group spares that screen
+     * another layer of nesting every time a switch is added here.
+     */
+    data class Privacy(
+        val appLock: Boolean = false,
+        val secureScreen: Boolean = false,
+        val stripPhotoLocation: Boolean = true
+    )
+
+    /**
+     * [Privacy.stripPhotoLocation] is the one that defaults to on. A camera
+     * capture already carries its coordinates burned into the picture where the
+     * recipient can read them, so the EXIF copy tells a human nothing new while
+     * handing a precise fix to every app the photo passes through.
+     *
+     * The other two default to off: a lock the user did not ask for is a lock
+     * they will be surprised by, and screenshots are how people share a plot
+     * with family.
+     */
+    val privacy: Flow<Privacy> = context.settingsDataStore.data.map {
+        Privacy(
+            appLock = it[Keys.APP_LOCK] ?: false,
+            secureScreen = it[Keys.SECURE_SCREEN] ?: false,
+            stripPhotoLocation = it[Keys.STRIP_PHOTO_LOCATION] ?: true
+        )
+    }
+
     suspend fun setLanguage(language: Language) = context.settingsDataStore.edit {
         it[Keys.LANGUAGE] = language.tag ?: "system"
     }
@@ -157,5 +191,17 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setDynamicColor(enabled: Boolean) = context.settingsDataStore.edit {
         it[Keys.DYNAMIC_COLOR] = enabled
+    }
+
+    suspend fun setAppLock(enabled: Boolean) = context.settingsDataStore.edit {
+        it[Keys.APP_LOCK] = enabled
+    }
+
+    suspend fun setSecureScreen(enabled: Boolean) = context.settingsDataStore.edit {
+        it[Keys.SECURE_SCREEN] = enabled
+    }
+
+    suspend fun setStripPhotoLocation(enabled: Boolean) = context.settingsDataStore.edit {
+        it[Keys.STRIP_PHOTO_LOCATION] = enabled
     }
 }

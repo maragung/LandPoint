@@ -372,4 +372,14 @@
     <string name="pdf_footer_page">Dibuat oleh LandPoint · halaman %1$d</string>
     <string name="pdf_footer_disclaimer">Hanya untuk catatan pribadi — bukan dokumen pengukuran resmi.</string>
 
+
+    <!-- Privasi dan keamanan -->
+    <string name="settings_section_privacy">Privasi dan keamanan</string>
+    <string name="settings_privacy_no_cloud">Data lahan dan foto tetap di HP ini. Tidak disalin ke backup cloud Google — pakai Backup di bawah untuk menyimpan salinan yang Anda kendalikan. HP baru tetap bisa menerima semuanya lewat transfer langsung antar-perangkat Android.</string>
+    <string name="settings_strip_photo_location">Hapus lokasi foto saat dibagikan</string>
+    <string name="settings_strip_photo_location_hint">Salinan yang dibagikan kehilangan tag GPS-nya. Koordinat yang tercetak di gambar tetap terbaca, dan foto yang tersimpan di sini tidak diubah.</string>
+    <string name="boundary_corner_tap_hint">Ketuk patok untuk mengubah atau menghapusnya.</string>
+    <string name="corner_sheet_title">Patok %1$d</string>
+    <string name="corner_sheet_edit">Ubah koordinat</string>
+    <string name="corner_sheet_delete">Hapus patok ini</string>
 </resources>

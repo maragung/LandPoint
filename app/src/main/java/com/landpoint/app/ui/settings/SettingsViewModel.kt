@@ -34,6 +34,7 @@ data class SettingsUiState(
     val coordFormat: SettingsRepository.CoordFormat = SettingsRepository.CoordFormat.DECIMAL,
     val units: SettingsRepository.Units = SettingsRepository.Units.METRIC,
     val areaUnit: SettingsRepository.AreaUnit = SettingsRepository.AreaUnit.SQM,
+    val privacy: SettingsRepository.Privacy = SettingsRepository.Privacy(),
     val duplicateStrategy: DuplicateStrategy = DuplicateStrategy.SKIP,
     val landCount: Int = 0,
     val offlineArchives: List<OfflineArchive> = emptyList(),
@@ -68,13 +69,14 @@ class SettingsViewModel(
         combine(
             settings.language, settings.darkMode, settings.dynamicColor
         ) { lang, dark, dynamic -> Triple(lang, dark, dynamic) },
-        settings.coordFormat,
+        combine(settings.coordFormat, settings.privacy) { format, privacy -> format to privacy },
         combine(settings.units, settings.areaUnit) { units, area -> units to area },
         // Paired to stay inside combine()'s five-flow limit.
         combine(repository.observeCount(), offline) { count, maps -> count to maps },
         combine(busy, message, duplicateStrategy) { b, m, d -> Triple(b, m, d) }
-    ) { appearance, format, unitsAndArea, countAndMaps, (isBusy, msg, strategy) ->
+    ) { appearance, formatAndPrivacy, unitsAndArea, countAndMaps, (isBusy, msg, strategy) ->
         val (language, dark, dynamic) = appearance
+        val (format, privacy) = formatAndPrivacy
         val (units, areaUnit) = unitsAndArea
         val (count, maps) = countAndMaps
         SettingsUiState(
@@ -84,6 +86,7 @@ class SettingsViewModel(
             coordFormat = format,
             units = units,
             areaUnit = areaUnit,
+            privacy = privacy,
             duplicateStrategy = strategy,
             landCount = count,
             offlineArchives = maps.archives,
@@ -126,6 +129,18 @@ class SettingsViewModel(
 
     fun setAreaUnit(unit: SettingsRepository.AreaUnit) {
         viewModelScope.launch { settings.setAreaUnit(unit) }
+    }
+
+    fun setAppLock(enabled: Boolean) {
+        viewModelScope.launch { settings.setAppLock(enabled) }
+    }
+
+    fun setSecureScreen(enabled: Boolean) {
+        viewModelScope.launch { settings.setSecureScreen(enabled) }
+    }
+
+    fun setStripPhotoLocation(enabled: Boolean) {
+        viewModelScope.launch { settings.setStripPhotoLocation(enabled) }
     }
 
     fun setDuplicateStrategy(strategy: DuplicateStrategy) {

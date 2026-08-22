@@ -200,6 +200,20 @@ fun SettingsScreen(
                 )
             }
 
+            SettingsSection(stringResource(R.string.settings_section_privacy)) {
+                Text(
+                    stringResource(R.string.settings_privacy_no_cloud),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                SwitchRow(
+                    label = stringResource(R.string.settings_strip_photo_location),
+                    hint = stringResource(R.string.settings_strip_photo_location_hint),
+                    checked = state.privacy.stripPhotoLocation,
+                    onCheckedChange = viewModel::setStripPhotoLocation
+                )
+            }
+
             SettingsSection(stringResource(R.string.settings_section_backup)) {
                 Text(
                     pluralStringResource(

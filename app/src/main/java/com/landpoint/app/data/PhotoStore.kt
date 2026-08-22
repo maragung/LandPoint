@@ -3,6 +3,7 @@ package com.landpoint.app.data
 import android.content.Context
 import android.net.Uri
 import androidx.core.content.FileProvider
+import androidx.exifinterface.media.ExifInterface
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -101,10 +102,45 @@ class PhotoStore(private val context: Context) {
         Unit
     }
 
-    fun shareUriFor(path: String): Uri? = runCatching {
+    /**
+     * Stages a copy of a stored photo and returns a uri the receiving app may
+     * read.
+     *
+     * With [stripLocation] on, the GPS tags are cleared from the staged copy —
+     * never from the stored original, which is this app's own record and is what
+     * mapping software reads back. What the recipient still gets is the stamp
+     * [PhotoStamper] drew into the pixels: a human can read where the photo was
+     * taken, while the machine-readable fix that every app in the share chain
+     * would have harvested is gone.
+     */
+    fun shareUriFor(path: String, stripLocation: Boolean = true): Uri? = runCatching {
         val source = File(path)
         val staged = File(cacheDir, source.name)
         source.copyTo(staged, overwrite = true)
+        // Refuse rather than fall back: a photo whose tags could not be cleared
+        // must not be shared with the coordinates still on it.
+        if (stripLocation && !clearLocationExif(staged)) {
+            staged.delete()
+            return@runCatching null
+        }
         FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", staged)
     }.getOrNull()
+
+    /** Blanks every GPS tag in place; false if the file could not be rewritten. */
+    private fun clearLocationExif(file: File): Boolean = runCatching {
+        val exif = ExifInterface(file)
+        listOf(
+            ExifInterface.TAG_GPS_LATITUDE,
+            ExifInterface.TAG_GPS_LATITUDE_REF,
+            ExifInterface.TAG_GPS_LONGITUDE,
+            ExifInterface.TAG_GPS_LONGITUDE_REF,
+            ExifInterface.TAG_GPS_ALTITUDE,
+            ExifInterface.TAG_GPS_ALTITUDE_REF,
+            ExifInterface.TAG_GPS_TIMESTAMP,
+            ExifInterface.TAG_GPS_DATESTAMP,
+            ExifInterface.TAG_GPS_PROCESSING_METHOD
+        ).forEach { exif.setAttribute(it, null) }
+        exif.saveAttributes()
+        true
+    }.getOrDefault(false)
 }
