@@ -65,14 +65,45 @@ class LocationProvider(private val context: Context) {
      *
      * Empty when permission is missing, so every caller below inherits the
      * permission gate from one place instead of repeating it.
+     *
+     * From API 31 the platform's own fused provider is asked for first. That is
+     * the "fused location provider" done without Google Play Services: it is part
+     * of `LocationManager`, and on most devices it is where the vendor's own
+     * GNSS/Wi-Fi/sensor blend comes out. GPS and NETWORK are still requested
+     * beside it, because a fused implementation may simply forward one of them and
+     * on that device the raw providers are all there is. Below API 31 there is no
+     * fused provider to ask, so PASSIVE is added instead — it costs no radio time
+     * and yields whatever fixes other apps have already paid for.
+     *
+     * Providers are filtered against [LocationManager.getAllProviders] as well as
+     * being tested for being enabled: asking for a name the device does not have
+     * throws, and which names exist varies by manufacturer.
      */
     private fun usableProviders(): List<String> {
         if (!hasPermission()) return emptyList()
         return runCatching {
-            listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
-                .filter { locationManager.isProviderEnabled(it) }
+            val manager = locationManager
+            val present = manager.allProviders.toSet()
+            preferredProviders()
+                .filter { it in present && manager.isProviderEnabled(it) }
         }.getOrDefault(emptyList())
     }
+
+    /** The provider names worth asking this Android version for, best first. */
+    private fun preferredProviders(): List<String> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            listOf(
+                LocationManager.FUSED_PROVIDER,
+                LocationManager.GPS_PROVIDER,
+                LocationManager.NETWORK_PROVIDER
+            )
+        } else {
+            listOf(
+                LocationManager.GPS_PROVIDER,
+                LocationManager.NETWORK_PROVIDER,
+                LocationManager.PASSIVE_PROVIDER
+            )
+        }
 
     /**
      * Last fix the system kept for [provider], or null.
@@ -235,7 +266,14 @@ class LocationProvider(private val context: Context) {
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 if (samples.size >= LocationAveraging.MAX_SAMPLES) return
-                samples += location.toGeoSample(location.provider)
+                val sample = location.toGeoSample(location.provider)
+                // The same fix can arrive twice — the fused provider often
+                // forwards the GPS one verbatim, and both are subscribed. Counting
+                // it as two independent readings would make the averaged accuracy
+                // look better than the receiver ever managed, which is exactly the
+                // number that ends up printed beside someone's boundary.
+                if (samples.any { it.isSameFixAs(sample) }) return
+                samples += sample
                 val stop = LocationAveraging.shouldStop(
                     samples,
                     System.currentTimeMillis() - started
@@ -294,16 +332,24 @@ class LocationProvider(private val context: Context) {
         }
     }
 
+    /**
+     * Whether two samples are one fix seen twice.
+     *
+     * Coordinates are compared exactly on purpose: a forwarded fix is the same
+     * `Location` object's numbers, bit for bit, while two genuinely separate
+     * readings a metre apart differ far below this in the last decimal places.
+     */
+    private fun GeoSample.isSameFixAs(other: GeoSample): Boolean =
+        timestamp == other.timestamp &&
+            latitude == other.latitude &&
+            longitude == other.longitude
+
     private fun Location.toGeoSample(provider: String?) = GeoSample(
         latitude = latitude,
         longitude = longitude,
         altitude = if (hasAltitude()) altitude else null,
         accuracy = if (hasAccuracy()) accuracy else null,
-        source = when (provider) {
-            LocationManager.GPS_PROVIDER -> FixSource.GPS
-            LocationManager.NETWORK_PROVIDER -> FixSource.NETWORK
-            else -> FixSource.OTHER
-        },
+        source = FixSource.of(provider),
         timestamp = time
     )
 
@@ -313,6 +359,8 @@ class LocationProvider(private val context: Context) {
         altitude = if (hasAltitude()) altitude else null,
         accuracy = if (hasAccuracy()) accuracy else null,
         bearing = if (hasBearing()) bearing else null,
+        speed = if (hasSpeed()) speed else null,
+        provider = provider,
         timestamp = time
     )
 

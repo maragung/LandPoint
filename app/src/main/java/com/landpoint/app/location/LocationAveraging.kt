@@ -3,8 +3,33 @@ package com.landpoint.app.location
 import com.landpoint.app.util.GeoUtils
 import kotlin.math.sqrt
 
-/** Which radio produced a sample. NETWORK is the cell-tower (BTS) / Wi-Fi fix. */
-enum class FixSource { GPS, NETWORK, OTHER }
+/**
+ * Which radio produced a sample.
+ *
+ * NETWORK is the cell-tower (BTS) / Wi-Fi fix. FUSED is the platform's own blend
+ * on API 31 and later — usually satellites, but the caller cannot know that, so it
+ * is treated as its own thing rather than counted as GPS.
+ */
+enum class FixSource {
+    GPS, FUSED, NETWORK, OTHER;
+
+    companion object {
+        /**
+         * The source behind a [android.location.LocationManager] provider name.
+         *
+         * The names are spelled out rather than read from `LocationManager` so this
+         * file stays free of Android: it is the arithmetic half of location work and
+         * is tested on the JVM. They are platform constants and cannot change — a
+         * stored fix from an older Android would name the same strings.
+         */
+        fun of(provider: String?): FixSource = when (provider) {
+            "gps" -> GPS
+            "fused" -> FUSED
+            "network" -> NETWORK
+            else -> OTHER
+        }
+    }
+}
 
 /** One raw reading, before averaging. */
 data class GeoSample(
@@ -93,11 +118,16 @@ object LocationAveraging {
             ?.toDouble()
         val floor = when (sample.source) {
             FixSource.GPS -> 3.0
+            // A fused fix may be satellites or may be a Wi-Fi centroid wearing an
+            // optimistic accuracy. Floored above GPS because there is no way to ask
+            // which it was.
+            FixSource.FUSED -> 5.0
             FixSource.NETWORK -> 30.0
             FixSource.OTHER -> 10.0
         }
         val fallback = when (sample.source) {
             FixSource.GPS -> 30.0
+            FixSource.FUSED -> 50.0
             FixSource.NETWORK -> 500.0
             FixSource.OTHER -> 200.0
         }

@@ -59,6 +59,10 @@ jobs:
         if: failure()
         shell: bash
         run: |
+          # No -e and no pipefail here: every grep below is allowed to match
+          # nothing, and a reporting step that dies on its own empty output is how
+          # the failure it was meant to explain goes unreported.
+          set +e +o pipefail
           summarise() {
             # Kotlin ("e: file:///...") and javac ("...error:") diagnostics, plus
             # the JUnit lines Gradle prints for a failing test, and its own "What
@@ -67,6 +71,7 @@ jobs:
               grep -v 'Execution failed for task' |
               head -n 60
           }
+          ls -l gradle-tests.log gradle-build.log 2>&1 | sed 's/^/log: /'
           details=$(summarise gradle-tests.log gradle-build.log)
           if [ -z "$details" ]; then
             details=$(tail -n 40 gradle-tests.log gradle-build.log 2>/dev/null)
