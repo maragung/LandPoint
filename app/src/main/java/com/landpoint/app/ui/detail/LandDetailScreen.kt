@@ -4,7 +4,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -67,31 +66,26 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.landpoint.app.R
 import com.landpoint.app.data.model.Land
 import com.landpoint.app.data.model.Photo
 import androidx.compose.ui.res.pluralStringResource
+import com.landpoint.app.ui.components.LandMap
 import com.landpoint.app.ui.components.LandShapeThumb
 import com.landpoint.app.ui.components.MapAttribution
+import com.landpoint.app.ui.components.MapCorner
+import com.landpoint.app.ui.components.MapPin
+import com.landpoint.app.ui.components.MapShape
 import com.landpoint.app.ui.components.PARCEL_ZOOM
-import com.landpoint.app.ui.components.applyTileTheme
-import com.landpoint.app.ui.components.cornerMarkerIcon
-import com.landpoint.app.ui.components.describeForAccessibility
-import com.landpoint.app.ui.components.drawBoundary
-import com.landpoint.app.ui.components.frame
-import com.landpoint.app.ui.components.rememberBasemapChoice
-import com.landpoint.app.ui.components.rememberLandMapView
+import com.landpoint.app.ui.components.rememberLandMapController
+import com.landpoint.app.ui.components.rememberMapPrefs
 import com.landpoint.app.util.AreaFormat
 import com.landpoint.app.util.GeoPoint
 import com.landpoint.app.util.GeoUtils
 import com.landpoint.app.util.PolygonMath
 import com.landpoint.app.util.ShareUtils
-import org.osmdroid.mapsforge.MapsForgeTileSource
-import org.osmdroid.util.GeoPoint as OsmGeoPoint
-import org.osmdroid.views.overlay.Marker
 import kotlin.math.roundToInt
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -107,7 +101,6 @@ fun LandDetailScreen(
     viewModel: LandDetailViewModel = viewModel(factory = LandDetailViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val vectorSource by viewModel.vectorSource.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHost = remember { SnackbarHostState() }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -217,7 +210,6 @@ fun LandDetailScreen(
             else -> DetailContent(
                 land = land,
                 state = state,
-                vectorSource = vectorSource,
                 onNavigate = { ShareUtils.navigateTo(context, land) },
                 onCompass = { onCompass(land.id) },
                 onShape = { onShape(land.id) },
@@ -254,7 +246,6 @@ fun LandDetailScreen(
 private fun DetailContent(
     land: Land,
     state: LandDetailUiState,
-    vectorSource: MapsForgeTileSource?,
     onNavigate: () -> Unit,
     onCompass: () -> Unit,
     onShape: () -> Unit,
@@ -344,7 +335,6 @@ private fun DetailContent(
         BoundaryMapCard(
             land = land,
             boundary = state.boundary,
-            vectorSource = vectorSource,
             onOpen = onShape
         )
 
@@ -449,11 +439,8 @@ private fun DetailContent(
 private fun BoundaryMapCard(
     land: Land,
     boundary: List<GeoPoint>,
-    vectorSource: MapsForgeTileSource?,
     onOpen: () -> Unit
 ) {
-    val context = LocalContext.current
-    val isDark = isSystemInDarkTheme()
     val boundaryColour = MaterialTheme.colorScheme.primary.toArgb()
     val openLabel = stringResource(R.string.shape_open_preview)
     // Said by the transparent button in front of the map, not by the map: one
@@ -470,71 +457,57 @@ private fun BoundaryMapCard(
     // The style chosen on the full-screen maps, shown here too: the point of this
     // card is recognising the place at a glance, and someone who picked aerial
     // imagery for that reason wants it on the picture as much as on the map.
-    val basemap = rememberBasemapChoice(hasVectorMap = vectorSource != null)
-    val mapView = rememberLandMapView(
-        vectorSource = vectorSource,
-        basemap = basemap.mode,
-        interactive = false
-    )
-    val hasCentred = remember(mapView) { mutableStateOf(false) }
+    val prefs = rememberMapPrefs()
+    val controller = rememberLandMapController(fitPadding = CARD_FIT_PADDING)
 
     // The corners, or the pin of a land that has none.
     val framePoints = remember(boundary, land.id) {
         boundary.ifEmpty { listOf(GeoPoint(land.latitude, land.longitude)) }
     }
+    val shapes = remember(boundary, land.id) {
+        listOf(MapShape(id = land.id, points = boundary))
+    }
+    val corners = remember(boundary) {
+        boundary.mapIndexed { index, point ->
+            MapCorner(
+                id = index.toString(),
+                latitude = point.latitude,
+                longitude = point.longitude,
+                label = (index + 1).toString()
+            )
+        }
+    }
+    val pins = remember(boundary, land.id, land.latitude, land.longitude) {
+        if (boundary.isEmpty()) {
+            listOf(MapPin(id = land.id, latitude = land.latitude, longitude = land.longitude))
+        } else {
+            emptyList()
+        }
+    }
+
+    // A single point gets a step back from the closest zoom: a card this size
+    // wants some surroundings in it, not one rooftop filling the frame.
+    LaunchedEffect(framePoints) { controller.frameOnce(framePoints, PARCEL_ZOOM - 2.0) }
 
     Card {
         Box(modifier = Modifier.fillMaxWidth().height(200.dp)) {
-            AndroidView(
-                factory = { mapView },
+            LandMap(
+                style = prefs.style,
+                controller = controller,
+                accentColour = boundaryColour,
                 modifier = Modifier.fillMaxSize(),
-                update = { map ->
-                    map.applyTileTheme(isDark, basemap.mode)
-                    map.describeForAccessibility(null)
-                    map.overlays.clear()
-
-                    map.drawBoundary(boundary, boundaryColour)
-                    boundary.forEachIndexed { index, point ->
-                        map.overlays.add(
-                            Marker(map).apply {
-                                position = OsmGeoPoint(point.latitude, point.longitude)
-                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                                icon = cornerMarkerIcon(
-                                    context,
-                                    (index + 1).toString(),
-                                    boundaryColour
-                                )
-                                // No info window: the tap belongs to the card.
-                                setOnMarkerClickListener { _, _ -> false }
-                            }
-                        )
-                    }
-                    if (boundary.isEmpty()) {
-                        map.overlays.add(
-                            Marker(map).apply {
-                                position = OsmGeoPoint(land.latitude, land.longitude)
-                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                                setOnMarkerClickListener { _, _ -> false }
-                            }
-                        )
-                    }
-
-                    // A single point gets a step back from the closest zoom:
-                    // a card this size wants some surroundings in it, not one
-                    // rooftop filling the frame.
-                    if (!hasCentred.value && map.frame(framePoints, PARCEL_ZOOM - 2.0)) {
-                        hasCentred.value = true
-                    }
-                    map.invalidate()
-                }
+                shapes = shapes,
+                pins = pins,
+                corners = corners,
+                interactive = false
             )
 
             // Behind the tap target below, so it is readable but not in the way.
             // Whoever made these tiles is named wherever they are drawn, and this
             // card draws them as much as the full screen map does.
-            MapAttribution(basemap.mode, Modifier.align(Alignment.BottomEnd))
+            MapAttribution(prefs.mode, Modifier.align(Alignment.BottomEnd))
 
-            // In front of the map, because the MapView consumes touches itself.
+            // In front of the map, because the map view consumes touches itself.
             Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -544,6 +517,14 @@ private fun BoundaryMapCard(
         }
     }
 }
+
+/**
+ * A tighter margin than the full-screen maps leave.
+ *
+ * Two hundred pixels tall is not much to spend on empty ground, and this card is
+ * read at a glance rather than measured against.
+ */
+private val CARD_FIT_PADDING = 16.dp
 
 /**
  * Every corner, numbered and in order.

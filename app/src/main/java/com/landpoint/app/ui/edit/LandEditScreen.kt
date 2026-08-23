@@ -167,11 +167,9 @@ fun LandEditScreen(
     // the boundary this very view model holds, and there is no way in this app
     // to hand a result back across a navigation boundary.
     if (state.isPickerOpen) {
-        val vectorSource by viewModel.vectorSource.collectAsStateWithLifecycle()
         val currentLocation by viewModel.currentLocation.collectAsStateWithLifecycle()
         CornerPickerScreen(
             state = state,
-            vectorSource = vectorSource,
             currentLocation = currentLocation,
             onTapCorner = viewModel::addDraftCornerAt,
             onMessageShown = viewModel::consumeMessage,

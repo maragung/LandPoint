@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -190,6 +191,21 @@ fun MapStyleAction(onClick: () -> Unit) {
     MapControl(
         icon = Icons.Default.Layers,
         contentDescription = stringResource(R.string.map_style),
+        onClick = onClick
+    )
+}
+
+/**
+ * Opens the offline downloader.
+ *
+ * On the map rather than only in settings because that is where a user realises they
+ * are about to lose signal, and the area they want saved is the one already on screen.
+ */
+@Composable
+fun MapOfflineAction(onClick: () -> Unit) {
+    MapControl(
+        icon = Icons.Default.CloudDownload,
+        contentDescription = stringResource(R.string.offline_title),
         onClick = onClick
     )
 }

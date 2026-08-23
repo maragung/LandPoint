@@ -1,14 +1,11 @@
 package com.landpoint.app.ui.shape
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -21,51 +18,42 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.landpoint.app.R
 import com.landpoint.app.ui.components.BasemapSheet
+import com.landpoint.app.ui.components.LandMap
 import com.landpoint.app.ui.components.MapAttribution
+import com.landpoint.app.ui.components.MapCorner
 import com.landpoint.app.ui.components.MapFitAction
+import com.landpoint.app.ui.components.MapFix
+import com.landpoint.app.ui.components.MapPin
+import com.landpoint.app.ui.components.MapScaleBar
+import com.landpoint.app.ui.components.MapShape
 import com.landpoint.app.ui.components.MapSideControls
 import com.landpoint.app.ui.components.MapStyleAction
+import com.landpoint.app.ui.components.MapTap
 import com.landpoint.app.ui.components.MapTopChrome
 import com.landpoint.app.ui.components.PARCEL_ZOOM
-import com.landpoint.app.ui.components.addScaleBar
-import com.landpoint.app.ui.components.applyTileTheme
-import com.landpoint.app.ui.components.cornerMarkerIcon
-import com.landpoint.app.ui.components.describeForAccessibility
-import com.landpoint.app.ui.components.drawBoundary
-import com.landpoint.app.ui.components.drawLocationDot
-import com.landpoint.app.ui.components.frame
-import com.landpoint.app.ui.components.rememberBasemapChoice
-import com.landpoint.app.ui.components.rememberLandMapView
-import com.landpoint.app.ui.components.zoomInAStep
-import com.landpoint.app.ui.components.zoomOutAStep
+import com.landpoint.app.ui.components.rememberLandMapController
+import com.landpoint.app.ui.components.rememberMapPrefs
 import com.landpoint.app.util.AreaFormat
-import com.landpoint.app.util.GeoPoint as LandGeoPoint
+import com.landpoint.app.util.GeoPoint
 import com.landpoint.app.util.GeoUtils
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.overlay.Marker
 import kotlin.math.roundToInt
-
-/**
- * How much of the bottom edge the summary card and the attribution take, so the
- * scale bar can be told to sit above them instead of behind them.
- */
-private const val SUMMARY_INSET_DP = 140f
 
 /**
  * The saved boundary of one land, on the whole screen.
@@ -86,18 +74,19 @@ fun LandShapeScreen(
     viewModel: LandShapeViewModel = viewModel(factory = LandShapeViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val vectorSource by viewModel.vectorSource.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-    val isDark = isSystemInDarkTheme()
-    val boundaryColour = MaterialTheme.colorScheme.primary.toArgb()
+    val prefs = rememberMapPrefs()
+    val controller = rememberLandMapController()
+    val accent = MaterialTheme.colorScheme.primary.toArgb()
+    val highlight = MaterialTheme.colorScheme.tertiary.toArgb()
     val land = state.land
 
-    val basemap = rememberBasemapChoice(hasVectorMap = vectorSource != null)
-    val mapView = rememberLandMapView(vectorSource = vectorSource, basemap = basemap.mode)
-    val hasCentred = remember(mapView) { mutableStateOf(false) }
+    // Which corner the user last tapped, if any. Saved rather than remembered, so
+    // turning the phone to look at the shape in landscape does not close the
+    // coordinates they turned it to read.
+    var openCorner by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // Resolved up here: the overlay block below is not composable, and building
-    // these inside it would re-read the resources on every pan.
+    // Resolved up here: these read string resources, and the map's update block is
+    // not composable.
     val cornerTitles = state.boundary.mapIndexed { index, point ->
         val coordinates = stringResource(
             R.string.boundary_corner_number,
@@ -150,57 +139,60 @@ fun LandShapeScreen(
                 // there is something to open the screen on.
                 val framePoints = remember(state.boundary, land.id) {
                     state.boundary.ifEmpty {
-                        listOf(LandGeoPoint(land.latitude, land.longitude))
+                        listOf(GeoPoint(land.latitude, land.longitude))
                     }
                 }
 
-                AndroidView(
-                    factory = { mapView },
+                val shapes = remember(state.boundary, land.id) {
+                    listOf(MapShape(id = land.id, points = state.boundary))
+                }
+                val corners = remember(state.boundary, openCorner) {
+                    state.boundary.mapIndexed { index, point ->
+                        val id = index.toString()
+                        MapCorner(
+                            id = id,
+                            latitude = point.latitude,
+                            longitude = point.longitude,
+                            label = (index + 1).toString(),
+                            selected = id == openCorner
+                        )
+                    }
+                }
+                // A land with no boundary still deserves to be findable on the map
+                // it was opened from; one with a boundary is its own marker.
+                val pins = remember(state.boundary, land.id, land.latitude, land.longitude) {
+                    if (state.boundary.isEmpty()) {
+                        listOf(MapPin(id = land.id, latitude = land.latitude, longitude = land.longitude))
+                    } else {
+                        emptyList()
+                    }
+                }
+                val fix = state.currentLocation?.let {
+                    MapFix(latitude = it.latitude, longitude = it.longitude, accuracyM = it.accuracyM)
+                }
+
+                // Framed once per visit and remembered across rotation, so turning
+                // the phone keeps whatever the user had panned to.
+                LaunchedEffect(framePoints) { controller.frameOnce(framePoints, PARCEL_ZOOM) }
+
+                LandMap(
+                    style = prefs.style,
+                    controller = controller,
+                    accentColour = accent,
                     modifier = Modifier.fillMaxSize(),
-                    update = { map ->
-                        map.applyTileTheme(isDark, basemap.mode)
-                        map.describeForAccessibility(mapDescription)
-                        map.overlays.clear()
-
-                        map.drawBoundary(state.boundary, boundaryColour)
-                        state.boundary.forEachIndexed { index, point ->
-                            map.overlays.add(
-                                Marker(map).apply {
-                                    position = GeoPoint(point.latitude, point.longitude)
-                                    title = cornerTitles[index]
-                                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                                    icon = cornerMarkerIcon(
-                                        context,
-                                        (index + 1).toString(),
-                                        boundaryColour
-                                    )
-                                }
-                            )
+                    shapes = shapes,
+                    pins = pins,
+                    corners = corners,
+                    fix = fix,
+                    selectedColour = highlight,
+                    contentDescription = mapDescription,
+                    // A tap on a corner asks what that corner is; a tap anywhere
+                    // else is done asking.
+                    onTap = { tap ->
+                        openCorner = when (tap) {
+                            is MapTap.Corner -> tap.id.takeUnless { it == openCorner }
+                            else -> null
                         }
-
-                        // A land with no boundary still deserves to be findable
-                        // on the map it was opened from.
-                        if (state.boundary.isEmpty()) {
-                            map.overlays.add(
-                                Marker(map).apply {
-                                    position = GeoPoint(land.latitude, land.longitude)
-                                    title = land.name
-                                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                                }
-                            )
-                        }
-
-                        state.currentLocation?.let { (lat, lon) ->
-                            map.drawLocationDot(lat, lon)
-                        }
-                        // A boundary is a measurement, so give it a scale to be
-                        // read against.
-                        map.addScaleBar(SUMMARY_INSET_DP)
-
-                        if (!hasCentred.value && map.frame(framePoints, PARCEL_ZOOM)) {
-                            hasCentred.value = true
-                        }
-                        map.invalidate()
                     }
                 )
 
@@ -210,68 +202,109 @@ fun LandShapeScreen(
                         title = land.name.ifBlank { stringResource(R.string.shape_title) },
                         actions = {
                             MapFitAction {
-                                mapView.frame(framePoints, PARCEL_ZOOM, animated = true)
+                                controller.frame(framePoints, PARCEL_ZOOM, animated = true)
                             }
-                            MapStyleAction { basemap.showSheet() }
+                            MapStyleAction { prefs.showSheet() }
                         }
                     )
 
                     if (state.boundary.isEmpty()) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-                            shape = MaterialTheme.shapes.small,
+                        MapNotice(
+                            text = stringResource(R.string.shape_no_boundary),
                             modifier = Modifier
                                 .align(Alignment.CenterHorizontally)
                                 .padding(horizontal = 12.dp)
-                        ) {
-                            Text(
-                                stringResource(R.string.shape_no_boundary),
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                            )
-                        }
+                        )
                     }
                 }
 
                 MapSideControls(
                     modifier = Modifier.align(Alignment.CenterEnd),
-                    onZoomIn = mapView::zoomInAStep,
-                    onZoomOut = mapView::zoomOutAStep,
+                    onZoomIn = controller::zoomIn,
+                    onZoomOut = controller::zoomOut,
                     onMyLocation = {
                         viewModel.refreshLocation()
-                        state.currentLocation?.let { (lat, lon) ->
-                            mapView.frame(
-                                listOf(LandGeoPoint(lat, lon)),
-                                PARCEL_ZOOM,
-                                animated = true
-                            )
+                        state.currentLocation?.let {
+                            controller.frame(listOf(it), PARCEL_ZOOM, animated = true)
                         }
                     }
                 )
 
-                // Attribution and summary share the bottom edge, stacked so
-                // neither has to be squeezed in beside the other.
+                // Everything that belongs to the bottom edge, stacked, so nothing
+                // has to be squeezed in beside anything else.
                 Column(
                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-                    horizontalAlignment = Alignment.End
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    MapAttribution(basemap.mode, Modifier.padding(horizontal = 12.dp))
-                    Spacer(modifier = Modifier.height(4.dp))
+                    // What the tapped corner replaced: the old engine popped an info
+                    // window over the marker, which covered the very corner it was
+                    // describing. Down here it covers nothing that is being looked at.
+                    openCorner?.toIntOrNull()?.let { index ->
+                        cornerTitles.getOrNull(index)?.let { title ->
+                            MapNotice(
+                                text = title,
+                                monospace = true,
+                                modifier = Modifier.padding(horizontal = 12.dp)
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        // A boundary is a measurement, so give it a scale to be read
+                        // against.
+                        MapScaleBar(controller = controller, imperial = prefs.imperial)
+                        Box(modifier = Modifier.weight(1f))
+                        MapAttribution(prefs.mode)
+                    }
+
                     ShapeSummary(state = state, onEdit = { onEdit(land.id) })
                 }
             }
         }
 
-        if (basemap.sheetVisible) {
+        if (prefs.sheetVisible) {
             BasemapSheet(
-                current = basemap.mode,
-                hasVectorMap = basemap.hasVectorMap,
-                onPick = basemap::select,
-                onDismiss = basemap::hideSheet
+                current = prefs.mode,
+                hasVectorMap = prefs.hasVectorMap,
+                onPick = prefs::select,
+                onDismiss = prefs::hideSheet
             )
         }
     }
 }
+
+/**
+ * A short line of text over the map, legible against whatever is under it.
+ *
+ * Shared by the "no boundary" note and the tapped-corner readout because they are
+ * the same thing to the eye — one sentence the map is telling you — and two
+ * differently-shaped chips saying different sorts of thing would read as chrome.
+ */
+@Composable
+private fun MapNotice(
+    text: String,
+    modifier: Modifier = Modifier,
+    monospace: Boolean = false
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = MAP_NOTICE_ALPHA),
+        shape = MaterialTheme.shapes.small,
+        modifier = modifier
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = if (monospace) FontFamily.Monospace else null,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+        )
+    }
+}
+
+/** Enough to read text through, enough to see the map is still under it. */
+private const val MAP_NOTICE_ALPHA = 0.92f
 
 /**
  * Area, perimeter, corner count — and the way back into the editor.

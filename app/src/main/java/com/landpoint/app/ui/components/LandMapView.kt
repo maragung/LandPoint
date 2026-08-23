@@ -1,307 +1,675 @@
 package com.landpoint.app.ui.components
 
-import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color as AndroidColor
-import android.graphics.ColorMatrixColorFilter
-import android.graphics.Paint
-import android.graphics.drawable.BitmapDrawable
-import android.graphics.drawable.Drawable
-import android.graphics.drawable.ShapeDrawable
-import android.graphics.drawable.shapes.OvalShape
+import android.annotation.SuppressLint
+import android.content.ComponentCallbacks2
+import android.content.res.Configuration
+import android.graphics.PointF
+import android.graphics.RectF
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import com.landpoint.app.data.BasemapMode
-import com.landpoint.app.util.GeoPoint as LandGeoPoint
-import com.landpoint.app.util.NightTiles
-import org.osmdroid.mapsforge.MapsForgeTileProvider
-import org.osmdroid.mapsforge.MapsForgeTileSource
-import org.osmdroid.tileprovider.modules.SqlTileWriter
-import org.osmdroid.tileprovider.tilesource.ITileSource
-import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import org.osmdroid.tileprovider.tilesource.TileSourcePolicy
-import org.osmdroid.tileprovider.tilesource.XYTileSource
-import org.osmdroid.tileprovider.util.SimpleRegisterReceiver
-import org.osmdroid.util.BoundingBox
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.util.MapTileIndex
-import org.osmdroid.views.CustomZoomButtonsController
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.Polygon
-import org.osmdroid.views.overlay.Polyline
-import org.osmdroid.views.overlay.ScaleBarOverlay
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.landpoint.app.map.GeoBounds
+import com.landpoint.app.map.MapStyle
+import com.landpoint.app.util.GeoPoint
+import com.landpoint.app.util.GeoUtils
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
+import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.camera.CameraUpdate
+import org.maplibre.android.camera.CameraUpdateFactory
+import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
+import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapLibreMapOptions
+import org.maplibre.android.maps.MapView
+import org.maplibre.android.maps.Style
+import org.maplibre.geojson.Feature
 
-/** Close enough to read a fence line; MAPNIK's tiles stop here too. */
+/** Close enough to read a fence line, and the deepest any bundled source draws. */
 const val PARCEL_ZOOM = 19.0
 
-/** One step of the zoom buttons, and the animation that goes with it. */
-private const val ZOOM_ANIMATION_MS = 250L
+/** One press of a zoom button. */
+private const val ZOOM_STEP = 1.0
 
-/** The "you are here" blue, the same one on every map in the app. */
-private const val LOCATION_DOT_COLOUR = "#1E88E5"
+/** Long enough to be seen as movement, short enough not to be a wait. */
+private const val ZOOM_ANIMATION_MS = 250
 
-/** Enough to see the shape as a shape, not a wash of colour over the ground. */
-private const val BOUNDARY_FILL_ALPHA = 60
-
-/** Room for a two-digit corner number, and for a fingertip to land on it. */
-private const val CORNER_MARKER_DP = 22f
+/** Breathing room around a fitted boundary, so its corners are not on the bezel. */
+private val FIT_PADDING = 48.dp
 
 /**
- * How many tiles a style may fetch at once.
+ * How far from a finger a pin still counts as tapped.
  *
- * Two, on donated or goodwill infrastructure. osmdroid's own default is higher,
- * but a boundary is a small area and nobody here is in a hurry — a map that fills
- * in half a second slower costs the user nothing and costs the tile server a
- * great deal less.
+ * Larger than the pins themselves. A corner pin is about ten density-independent
+ * pixels across and a fingertip covers several times that, so hit-testing the drawn
+ * shape alone would make a correctly aimed tap miss.
  */
-private const val TILE_CONCURRENCY = 2
+private val TAP_RADIUS = 20.dp
 
 /**
- * Terms every style here is used under: no bulk downloading, no fetching tiles
- * the user has not asked to see, and a real user agent so the operator can tell
- * who is asking.
+ * The horizontal span, in pixels, used to measure the map's scale.
+ *
+ * Wide enough that the two sample points are far apart relative to any rounding in
+ * the projection, narrow enough that Mercator's own scale change across it is
+ * negligible.
  */
-private val COURTEOUS_TILES = TileSourcePolicy(
-    TILE_CONCURRENCY,
-    TileSourcePolicy.FLAG_NO_BULK or
-        TileSourcePolicy.FLAG_NO_PREVENTIVE or
-        TileSourcePolicy.FLAG_USER_AGENT_MEANINGFUL
+private const val SCALE_BASELINE_PX = 100f
+
+/**
+ * Below this the extent of a set of points is treated as a single place.
+ *
+ * Roughly a centimetre of latitude. Two corners recorded on the same spot, or a
+ * walk that never moved, otherwise ask to be fitted to a box with no extent — which
+ * resolves to maximum zoom over a blank field.
+ */
+private const val DEGENERATE_SPAN = 1e-7
+
+/**
+ * A closed area drawn on the map: a plot boundary, or the outline being tapped out.
+ *
+ * @param clickable whether a tap inside it should be reported. False on the corner
+ *   picker, where the outline is a drawing in progress and a tap on it means "put a
+ *   point here", not "select this shape". Reported as a feature property rather than
+ *   enforced by a layer filter, because a filter would stop the shape being *drawn*
+ *   as well as tapped.
+ */
+data class MapShape(
+    val id: String,
+    val points: List<GeoPoint>,
+    val clickable: Boolean = false
+)
+
+/** A place marker — one recorded land, at its stored position. */
+data class MapPin(
+    val id: String,
+    val latitude: Double,
+    val longitude: Double
 )
 
 /**
- * Esri's World Imagery, the aerial photography behind [BasemapMode.SATELLITE].
+ * One numbered vertex of a boundary.
  *
- * The same imagery the OpenStreetMap editors show, and the reason this app can
- * offer a real picture of the ground without an API key. Its terms want the
- * source named wherever it is drawn, which is what `map_attribution_esri` does on
- * every screen that shows it.
- *
- * Note the tile path order — zoom, **y**, then x. ArcGIS servers are row-major,
- * unlike the z/x/y of every other source here, and getting it the usual way round
- * silently returns imagery of somewhere else entirely.
+ * The number is drawn on the map rather than left to a tooltip because the order of
+ * the corners *is* the outline: a user working out why an edge crosses itself has to
+ * be able to read the sequence straight off the map.
  */
-private val ESRI_WORLD_IMAGERY: OnlineTileSourceBase = object : OnlineTileSourceBase(
-    "EsriWorldImagery",
-    0,
-    19,
-    256,
-    "",
-    arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/"),
-    "Imagery © Esri, Maxar, Earthstar Geographics",
-    COURTEOUS_TILES
-) {
-    override fun getTileURLString(pMapTileIndex: Long): String =
-        baseUrl +
-            MapTileIndex.getZoom(pMapTileIndex) + "/" +
-            MapTileIndex.getY(pMapTileIndex) + "/" +
-            MapTileIndex.getX(pMapTileIndex)
+data class MapCorner(
+    val id: String,
+    val latitude: Double,
+    val longitude: Double,
+    val label: String,
+    val selected: Boolean = false
+)
+
+/**
+ * Where the device thinks it is, and how sure it is.
+ *
+ * [accuracyM] is Android's own figure, passed through untouched and drawn as a
+ * circle of that radius on the ground. Null when the fix carries no estimate, in
+ * which case only the dot is drawn — an invented radius would be a claim about
+ * precision the receiver never made.
+ */
+data class MapFix(
+    val latitude: Double,
+    val longitude: Double,
+    val accuracyM: Double? = null
+)
+
+/**
+ * What the user tapped.
+ *
+ * Reported as one sealed type rather than as four callbacks so the priority between
+ * them is decided in one place. A corner sits inside the boundary it belongs to and
+ * a boundary sits on the ground, so without a fixed order every screen would have to
+ * work out for itself which of the three it meant.
+ */
+sealed interface MapTap {
+
+    /** A numbered corner. Also how a corner is *selected* while dragging is enabled. */
+    data class Corner(val id: String) : MapTap
+
+    /** A land's place marker. */
+    data class Pin(val id: String) : MapTap
+
+    /** Inside a shape that asked to be clickable. */
+    data class Shape(val id: String) : MapTap
+
+    /**
+     * Bare map.
+     *
+     * @param toleranceM the caller's touch tolerance converted to metres on the
+     *   ground at the current zoom. The corner picker needs it to decide whether a
+     *   tap landed on an existing edge, and only the map knows the conversion.
+     */
+    data class Ground(val point: GeoPoint, val toleranceM: Double) : MapTap
 }
 
 /**
- * OpenTopoMap, the contour and relief style behind [BasemapMode.TERRAIN].
+ * The camera, the zoom buttons and the map's scale, held outside the map view.
  *
- * OpenStreetMap data plus SRTM elevation, published CC-BY-SA — so the attribution
- * on screen is a licence condition, not a courtesy. Defined here rather than
- * taken from `TileSourceFactory.OpenTopo` so it carries [COURTEOUS_TILES]: the
- * bundled definition has no policy and would let osmdroid hammer a volunteer
- * server harder than this app has any business doing.
+ * Two things make this worth its own object rather than a handful of lambdas.
+ *
+ * The camera is saved state. Screen rotation destroys the map view and builds a new
+ * one, and process recreation destroys the whole activity; without somewhere durable
+ * to keep the camera, both throw the user back to the view the screen opened with.
+ * The previous engine's map screens each kept a `remember { mutableStateOf(false) }`
+ * for "have we centred yet", which reset on rotation and re-framed every time.
+ *
+ * And the camera is asked to move before there is anything to move. `frame` is
+ * called from a Compose `update` block that runs before the native map exists and
+ * before the view has been measured — a bounding box cannot be fitted to a view of
+ * no size — so requests are buffered and replayed. The buffer holds one request,
+ * deliberately: two camera moves queued back to back mean the user changed their
+ * mind, and only the last one is worth honouring.
  */
-private val OPEN_TOPO_MAP: OnlineTileSourceBase = XYTileSource(
-    "OpenTopoMap",
-    0,
-    17,
-    256,
-    ".png",
-    arrayOf(
-        "https://a.tile.opentopomap.org/",
-        "https://b.tile.opentopomap.org/",
-        "https://c.tile.opentopomap.org/"
-    ),
-    "© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)",
-    COURTEOUS_TILES
-)
+@Stable
+class LandMapController internal constructor(
+    private val cameraState: MutableState<CameraPosition?>,
+    private val framedState: MutableState<Boolean>,
+    private val fitPaddingPx: Int
+) {
+    private var view: MapView? = null
+    private var map: MapLibreMap? = null
+    private var pending: ((MapLibreMap) -> Unit)? = null
 
-/**
- * The tiles a [BasemapMode] draws.
- *
- * [vectorSource] is only consulted for [BasemapMode.IMPORTED], and a null there
- * means the user asked for an offline map that is no longer present — the street
- * tiles are a better answer than an empty screen.
- */
-fun tileSourceFor(mode: BasemapMode, vectorSource: MapsForgeTileSource?): ITileSource =
-    when (mode) {
-        BasemapMode.STREET -> TileSourceFactory.MAPNIK
-        BasemapMode.SATELLITE -> ESRI_WORLD_IMAGERY
-        BasemapMode.TERRAIN -> OPEN_TOPO_MAP
-        BasemapMode.IMPORTED -> vectorSource ?: TileSourceFactory.MAPNIK
+    /**
+     * Ground metres per screen pixel at the centre of the view, or zero before the
+     * map has drawn.
+     *
+     * Compose state, so the scale bar and anything else showing a distance recomposes
+     * as the user pinches.
+     *
+     * Measured rather than asked for. `Projection.getMetersPerPixelAtLatitude` exists,
+     * but whether it answers in screen pixels or in style pixels cannot be settled
+     * from the library's bytecode, and being wrong by the display's density factor
+     * would silently mis-size the corner picker's edge tolerance — a bug that looks
+     * like the app ignoring taps rather than like a unit error. Two points a known
+     * number of pixels apart, put through the projection and then through the same
+     * distance function the rest of the app uses, cannot be wrong about its units.
+     */
+    var metresPerPixel: Double by mutableStateOf(0.0)
+        private set
+
+    /**
+     * The ground rectangle inside the selection frame, or null when nothing is being
+     * selected and before the map has drawn.
+     *
+     * Only sampled once a caller has asked for it with [trackSelection], so the
+     * screens that never select an area pay nothing for this existing.
+     *
+     * Read off the projection at the frame's own corners rather than derived from the
+     * camera. Web Mercator's scale changes with latitude, so shrinking the viewport's
+     * bounds by a percentage would put the rectangle's south edge somewhere other than
+     * where it is drawn — and the whole point of the frame is that what is inside it is
+     * what gets downloaded.
+     */
+    var selection: GeoBounds? by mutableStateOf(null)
+        private set
+
+    /** Negative until a caller asks for a selection, which is what switches it on. */
+    private var selectionInsetPx: Float = -1f
+
+    /**
+     * Starts reporting [selection] for a frame inset [insetPx] from every edge.
+     *
+     * Idempotent, so it can be called from composition on every frame.
+     */
+    fun trackSelection(insetPx: Float) {
+        if (selectionInsetPx == insetPx) return
+        selectionInsetPx = insetPx
+        sampleSelection()
     }
 
+    /** One step in. */
+    fun zoomIn() = zoomBy(ZOOM_STEP)
+
+    /** One step out. */
+    fun zoomOut() = zoomBy(-ZOOM_STEP)
+
+    /**
+     * Puts [points] on screen: a fitted box for a real extent, a centred view at
+     * [singlePointZoom] for one place.
+     *
+     * @param animated for a fit the user asked for by pressing a button, where the
+     *   movement is what confirms the press. Left off for the fit on opening: a screen
+     *   that flies in from a view of the whole planet is a slow way to say hello.
+     * @return false when there is nothing to frame yet, which is how a caller knows
+     *   to try again once data arrives.
+     */
+    fun frame(
+        points: List<GeoPoint>,
+        singlePointZoom: Double = PARCEL_ZOOM,
+        animated: Boolean = false
+    ): Boolean {
+        val target = targetFor(points, singlePointZoom) ?: return false
+        onMap { map -> target.applyTo(map, animated, fitPaddingPx) }
+        return true
+    }
+
+    /**
+     * Frames [points] the first time there is anything to frame, and never again.
+     *
+     * "Never again" survives rotation and process death, because the flag lives in
+     * saved state alongside the camera. Panning away and rotating the phone leaves the
+     * user where they were, rather than snapping back to the boundary.
+     */
+    fun frameOnce(points: List<GeoPoint>, singlePointZoom: Double = PARCEL_ZOOM): Boolean {
+        if (framedState.value) return false
+        if (!frame(points, singlePointZoom, animated = false)) return false
+        framedState.value = true
+        return true
+    }
+
+    internal fun attach(view: MapView, map: MapLibreMap) {
+        this.view = view
+        this.map = map
+        cameraState.value?.let { map.moveCamera(CameraUpdateFactory.newCameraPosition(it)) }
+        val queued = pending
+        pending = null
+        queued?.let { onMap(it) }
+        sampleScale()
+        sampleSelection()
+    }
+
+    internal fun detach() {
+        settle()
+        view = null
+        map = null
+    }
+
+    /** Called while the camera is moving; keeps the scale bar honest during a pinch. */
+    internal fun moving() {
+        sampleScale()
+        sampleSelection()
+    }
+
+    /**
+     * Called when the camera stops.
+     *
+     * Saving here rather than on pause covers every way a screen can go away —
+     * rotation, backgrounding, process death — without depending on which callback
+     * arrives before the state is written out.
+     */
+    internal fun settle() {
+        val map = map ?: return
+        cameraState.value = map.cameraPosition
+        sampleScale()
+        sampleSelection()
+    }
+
+    private fun zoomBy(steps: Double) {
+        onMap { map ->
+            map.animateCamera(CameraUpdateFactory.zoomBy(steps), ZOOM_ANIMATION_MS)
+        }
+    }
+
+    /**
+     * Runs [work] against a laid-out map, buffering or posting when there is not one
+     * yet. A camera update against a view of zero size resolves to maximum zoom.
+     */
+    private fun onMap(work: (MapLibreMap) -> Unit) {
+        val map = map
+        if (map == null) {
+            pending = work
+            return
+        }
+        if (map.width >= 1f && map.height >= 1f) work(map) else view?.post { this.map?.let(work) }
+    }
+
+    private fun sampleScale() {
+        val map = map ?: return
+        val width = map.width
+        val height = map.height
+        if (width < SCALE_BASELINE_PX || height < 1f) return
+        val y = height / 2f
+        val projection = map.projection
+        val left = projection.fromScreenLocation(PointF((width - SCALE_BASELINE_PX) / 2f, y))
+        val right = projection.fromScreenLocation(PointF((width + SCALE_BASELINE_PX) / 2f, y))
+        val metres = GeoUtils.distance(
+            left.latitude, left.longitude, right.latitude, right.longitude
+        )
+        if (metres > 0.0 && metres.isFinite()) metresPerPixel = metres / SCALE_BASELINE_PX
+    }
+
+    /**
+     * Reads the selection frame's corners back off the map.
+     *
+     * `min`/`max` rather than assuming which corner is which: a projection asked for
+     * a point outside the world clamps it, and a box built from a south edge north of
+     * its north edge would fail [GeoBounds]' own contract.
+     */
+    private fun sampleSelection() {
+        val inset = selectionInsetPx
+        if (inset < 0f) return
+        val map = map ?: return
+        val width = map.width
+        val height = map.height
+        if (width < 2 * inset + 1f || height < 2 * inset + 1f) return
+        val projection = map.projection
+        val topLeft = projection.fromScreenLocation(PointF(inset, inset))
+        val bottomRight = projection.fromScreenLocation(PointF(width - inset, height - inset))
+        val south = min(topLeft.latitude, bottomRight.latitude)
+        val north = max(topLeft.latitude, bottomRight.latitude)
+        val west = min(topLeft.longitude, bottomRight.longitude)
+        val east = max(topLeft.longitude, bottomRight.longitude)
+        if (!south.isFinite() || !north.isFinite() || !west.isFinite() || !east.isFinite()) return
+        selection = GeoBounds(south = south, west = west, north = north, east = east)
+    }
+}
+
 /**
- * The MapView every map screen starts from.
+ * A controller tied to the current screen, surviving rotation and process death.
  *
- * Four screens draw a map — the map tab, the corner picker, the boundary preview
- * and the thumbnail on a record — and each needs the same awkward setup: a
- * mapsforge provider when the chosen style is an imported vector map (MapView's
- * default provider cannot render one, only [MapsForgeTileProvider] calls
- * `renderTile`), the data connection switched off when there is nothing to fetch,
- * and a resume/pause/detach lifecycle that leaks a tile thread if it is forgotten.
- *
- * Only the provider forces a new MapView, and only [BasemapMode.IMPORTED] needs a
- * different one. Every other change of style is applied to the view already on
- * screen, so switching from street to satellite keeps the user exactly where they
- * were looking instead of throwing them back to the start.
- *
- * @param interactive false for a map that is a picture rather than a control:
- *   no pinch zoom. Pair it with a tappable overlay in front, which is what makes
- *   a mini map inside a scrolling form behave — a pannable map there would fight
- *   the scroll for every drag.
+ * @param fitPadding the margin left around a fitted boundary.
  */
 @Composable
-fun rememberLandMapView(
-    vectorSource: MapsForgeTileSource?,
-    basemap: BasemapMode = BasemapMode.STREET,
+fun rememberLandMapController(fitPadding: Dp = FIT_PADDING): LandMapController {
+    val camera = rememberSaveable { mutableStateOf<CameraPosition?>(null) }
+    val framed = rememberSaveable { mutableStateOf(false) }
+    val paddingPx = with(LocalDensity.current) { fitPadding.roundToPx() }
+    return remember(paddingPx) { LandMapController(camera, framed, paddingPx) }
+}
+
+/**
+ * The one map in the app.
+ *
+ * Four screens draw a map — the map tab, the corner picker, the boundary summary and
+ * the record's preview card — and they draw the same things in the same colours
+ * because they all come through here. What varies between them is which of the
+ * content lists is empty and whether gestures are on, not how a corner looks.
+ *
+ * Everything is declarative: hand it the shapes, pins, corners and fix that should
+ * be on screen and it makes the map match. The previous engine's API was the
+ * opposite — clear the overlay list, add objects back, invalidate — which meant every
+ * screen carried the same twenty lines of teardown and rebuild, and forgetting the
+ * clear leaked a boundary per recomposition.
+ *
+ * @param style null until the stored basemap preference has been read, which is a
+ *   frame or two after the screen opens. The map is composed anyway and simply has
+ *   nothing to draw yet — the alternative, defaulting to the street style and
+ *   switching when the real answer arrives, means loading two styles and showing the
+ *   user a basemap they did not choose on the way to the one they did.
+ * @param interactive false for the preview card, which is a picture of a map rather
+ *   than a map: no gestures, and the card itself takes the tap.
+ * @param touchTolerance how close to something a tap counts as being on it, in
+ *   [MapTap.Ground.toleranceM] terms. Zero unless a caller needs it.
+ * @param onMoveCorner enables dragging corners. When it is null the corner layer is
+ *   still tappable through [onTap]; when it is set, this view takes over the touch
+ *   stream for touches that start on a corner, which is why a short press is
+ *   reported as [MapTap.Corner] from here rather than by the map's own click
+ *   handling.
+ */
+@SuppressLint("ClickableViewAccessibility")
+@Composable
+fun LandMap(
+    style: MapStyle?,
+    controller: LandMapController,
+    accentColour: Int,
+    modifier: Modifier = Modifier,
+    shapes: List<MapShape> = emptyList(),
+    pins: List<MapPin> = emptyList(),
+    corners: List<MapCorner> = emptyList(),
+    fix: MapFix? = null,
+    selectedColour: Int = accentColour,
     interactive: Boolean = true,
-    initialZoom: Double? = null
-): MapView {
+    contentDescription: String? = null,
+    touchTolerance: Dp = 0.dp,
+    onTap: ((MapTap) -> Unit)? = null,
+    onMoveCorner: ((id: String, latitude: Double, longitude: Double) -> Unit)? = null
+) {
     val context = LocalContext.current
+    val density = LocalDensity.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val overlay = remember { LandMapOverlay() }
 
-    // Null unless the vector map is the thing being drawn. Keyed on this rather
-    // than on the source itself so a map file loading in the background — which
-    // happens on every visit — cannot pull the view out from under a user who is
-    // looking at satellite imagery.
-    val providerSource = if (basemap == BasemapMode.IMPORTED) vectorSource else null
-    val tileSource = remember(basemap, providerSource) { tileSourceFor(basemap, providerSource) }
+    val tapRadiusPx = with(density) { TAP_RADIUS.toPx() }
+    val tolerancePx = with(density) { touchTolerance.toPx() }
+    val slopPx = remember(context) {
+        ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+    }
 
-    val mapView = remember(providerSource, interactive) {
-        val view = if (providerSource != null) {
-            MapView(
-                context,
-                MapsForgeTileProvider(
-                    SimpleRegisterReceiver(context),
-                    providerSource,
-                    SqlTileWriter()
-                )
-            )
-        } else {
-            MapView(context)
-        }
-        view.apply {
-            setMultiTouchControls(interactive)
-            isTilesScaledToDpi = true
-            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-            // Set here as well as in the effect below, so the first frame draws
-            // the style that was asked for rather than a flash of the default.
-            applyBasemap(tileSource, basemap)
-            initialZoom?.let { controller.setZoom(it) }
+    // Read through state rather than captured, because the listeners below are
+    // installed once per map and would otherwise hold the first composition's
+    // lambdas for the life of the screen.
+    val currentTap = rememberUpdatedState(onTap)
+    val currentMove = rememberUpdatedState(onMoveCorner)
+
+    val mapView = remember(context) {
+        MapView(
+            context,
+            MapLibreMapOptions.createFromAttributes(context)
+                // The app draws its own attribution, on every screen, in its own
+                // typography; MapLibre's logo and info button would be a second copy
+                // of the same licence notice fighting the chrome for the corner.
+                .logoEnabled(false)
+                .attributionEnabled(false)
+                .compassEnabled(false)
+        ).apply {
+            // Not given a Bundle: the camera is restored by the controller from
+            // Compose's own saved state, which survives process death in the same
+            // place as the rest of the screen's state instead of in a second one.
+            onCreate(null)
         }
     }
 
-    LaunchedEffect(mapView, tileSource, basemap) {
-        mapView.applyBasemap(tileSource, basemap)
-        mapView.invalidate()
+    DisposableEffect(lifecycleOwner, mapView) {
+        var started = false
+        var resumed = false
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> {
+                    mapView.onStart()
+                    started = true
+                }
+                Lifecycle.Event.ON_RESUME -> {
+                    mapView.onResume()
+                    resumed = true
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    mapView.onPause()
+                    resumed = false
+                }
+                Lifecycle.Event.ON_STOP -> {
+                    mapView.onStop()
+                    started = false
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            // Back down the steps it came up. The renderer's GL surface is released
+            // in onStop and the native map in onDestroy, and going straight to
+            // destroy from a running state leaves the surface behind — the one leak
+            // this engine is easy to write.
+            if (resumed) mapView.onPause()
+            if (started) mapView.onStop()
+            mapView.onDestroy()
+        }
     }
 
     DisposableEffect(mapView) {
-        mapView.onResume()
-        onDispose {
-            mapView.onPause()
-            mapView.onDetach()
+        val app = context.applicationContext
+        // The tile cache is native memory the garbage collector cannot reclaim, so
+        // nothing frees it unless the map is told to. Registered on the application
+        // rather than handled in an activity callback because a map may be composed
+        // on a screen whose activity knows nothing about it.
+        val callbacks = object : ComponentCallbacks2 {
+            override fun onTrimMemory(level: Int) {
+                if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) mapView.onLowMemory()
+            }
+
+            @Deprecated("Kept because ComponentCallbacks still declares it.")
+            override fun onLowMemory() = mapView.onLowMemory()
+
+            override fun onConfigurationChanged(newConfig: Configuration) = Unit
+        }
+        app.registerComponentCallbacks(callbacks)
+        onDispose { app.unregisterComponentCallbacks(callbacks) }
+    }
+
+    var maplibre by remember { mutableStateOf<MapLibreMap?>(null) }
+    DisposableEffect(mapView) {
+        mapView.getMapAsync { maplibre = it }
+        onDispose { maplibre = null }
+    }
+
+    LaunchedEffect(maplibre, style?.key) {
+        val map = maplibre ?: return@LaunchedEffect
+        val current = style ?: return@LaunchedEffect
+        // Set before the style, so a switch from a source that draws to zoom 19 to
+        // one that stops at 17 pulls the camera back rather than leaving it staring
+        // at a level with no tiles behind it.
+        map.setMinZoomPreference(current.minZoom)
+        map.setMaxZoomPreference(current.maxZoom)
+        map.setStyle(Style.Builder().fromJson(current.json)) { loaded -> overlay.bind(loaded) }
+    }
+
+    LaunchedEffect(maplibre, interactive) {
+        val map = maplibre ?: return@LaunchedEffect
+        map.uiSettings.apply {
+            setAllGesturesEnabled(interactive)
+            // North stays up, always. Corner numbers are the only clue to an
+            // outline's direction, so a rotated map makes them harder to read rather
+            // than easier, and a tilted one puts the ground under a tap somewhere
+            // other than under the finger.
+            setRotateGesturesEnabled(false)
+            setTiltGesturesEnabled(false)
+            setCompassEnabled(false)
+            setLogoEnabled(false)
+            setAttributionEnabled(false)
         }
     }
 
-    return mapView
-}
+    DisposableEffect(maplibre) {
+        val map = maplibre ?: return@DisposableEffect onDispose { }
+        controller.attach(mapView, map)
 
-/**
- * Points the map at one style's tiles and at nothing else.
- *
- * The zoom clamp at the end is not decoration: the styles do not all reach the
- * same depth, and a user at street-level zoom who switches to the terrain map
- * would otherwise be left staring at the blank grey of tiles that were never
- * published.
- */
-private fun MapView.applyBasemap(source: ITileSource, mode: BasemapMode) {
-    setTileSource(source)
-    // With a local vector map there is nothing to fetch; saying so keeps the map
-    // from reaching for a radio the user may have switched off.
-    setUseDataConnection(mode.needsNetwork)
-    setMaxZoomLevel(mode.maxZoom)
-    mode.maxZoom?.let { cap -> if (zoomLevelDouble > cap) controller.setZoom(cap) }
-}
+        val idle = MapLibreMap.OnCameraIdleListener { controller.settle() }
+        val moving = MapLibreMap.OnCameraMoveListener { controller.moving() }
+        val click = MapLibreMap.OnMapClickListener { point ->
+            val handler = currentTap.value
+            if (handler == null) {
+                false
+            } else {
+                map.dispatchTap(
+                    point = point,
+                    radiusPx = tapRadiusPx,
+                    toleranceM = tolerancePx * controller.metresPerPixel,
+                    onTap = handler
+                )
+                true
+            }
+        }
+        map.addOnCameraIdleListener(idle)
+        map.addOnCameraMoveListener(moving)
+        map.addOnMapClickListener(click)
 
-/**
- * Recolours the tiles for the theme in force, and puts them back for a light one.
- *
- * Every map in the app calls this, because there is one set of tiles and they are
- * drawn for daylight — see [NightTiles] for what the recolouring does and why
- * osmdroid's own `INVERT_COLORS` was not enough.
- *
- * Photographs and relief shading are left alone whatever the theme: see
- * [BasemapMode.tintForNight]. A satellite image put through an inversion is not a
- * dark map, it is an unreadable one.
- */
-fun MapView.applyTileTheme(dark: Boolean, basemap: BasemapMode) {
-    val tint = dark && basemap.tintForNight
-    overlayManager.tilesOverlay.setColorFilter(if (tint) nightTileFilter else null)
-}
+        onDispose {
+            map.removeOnCameraIdleListener(idle)
+            map.removeOnCameraMoveListener(moving)
+            map.removeOnMapClickListener(click)
+            controller.detach()
+            overlay.unbind()
+        }
+    }
 
-/** One filter for the whole app: it holds nothing but the matrix. */
-private val nightTileFilter by lazy { ColorMatrixColorFilter(NightTiles.MATRIX) }
+    val draggable = interactive && onMoveCorner != null
+    DisposableEffect(maplibre, draggable) {
+        val map = maplibre
+        if (map == null || !draggable) return@DisposableEffect onDispose { }
+        val dragger = CornerDragger(
+            map = map,
+            slopPx = slopPx,
+            hitRadiusPx = tapRadiusPx,
+            onMove = { id, latitude, longitude ->
+                currentMove.value?.invoke(id, latitude, longitude)
+            },
+            onSelect = { id -> currentTap.value?.invoke(MapTap.Corner(id)) }
+        )
+        mapView.setOnTouchListener { _, event -> dragger.onTouch(event) }
+        onDispose { mapView.setOnTouchListener(null) }
+    }
 
-/** One zoom step, animated, the same on every map. */
-fun MapView.zoomInAStep() {
-    controller.zoomIn(ZOOM_ANIMATION_MS)
-}
-
-/** @see zoomInAStep */
-fun MapView.zoomOutAStep() {
-    controller.zoomOut(ZOOM_ANIMATION_MS)
-}
-
-/**
- * The scale bar, in the one place it belongs on a map this app draws.
- *
- * Bottom left, because a boundary is a measurement and the first thing anyone does
- * with a drawn plot is judge whether its size looks right. Add it last, after the
- * plots: overlays are drawn in order.
- *
- * @param bottomInsetDp how much of the bottom edge is already spoken for. The bar
- *   is painted onto the map's own canvas, so it knows nothing about the panels
- *   floating over it and has to be told to sit above them — a scale bar hidden
- *   behind a summary card is worse than none, because the map looks like it has one.
- */
-fun MapView.addScaleBar(bottomInsetDp: Float = 28f) {
-    val density = resources.displayMetrics.density
-    overlays.add(
-        ScaleBarOverlay(this).apply {
-            setAlignBottom(true)
-            setScaleBarOffset((density * 12).toInt(), (density * bottomInsetDp).toInt())
+    AndroidView(
+        factory = { mapView },
+        modifier = modifier,
+        update = {
+            it.describeForAccessibility(contentDescription)
+            overlay.set(shapes, pins, corners, fix, accentColour, selectedColour)
         }
     )
 }
 
 /**
- * Says in words what the map draws, for a screen reader.
+ * Turns a tap into the most specific thing under it.
  *
- * osmdroid paints the lot — tiles, plots, numbered corners, the location dot —
- * onto a single canvas, so a service walking the view tree finds one unlabelled
- * box and announces nothing at all. Short of shadowing every overlay with an
- * invisible view there is no way to expose them as separate nodes, so each
- * screen instead states what is on its map, and names the place the same facts
- * can be reached without one.
- *
- * A null [description] takes the map out of the reading order entirely: for a
- * map that is a picture behind a labelled control, the control does the talking
- * and a second stop here would only say the same thing twice.
+ * Always reports something. A tap that hits nothing is still news — it is how a
+ * corner gets added — and a screen with nothing to do with bare ground simply passes
+ * a handler that ignores [MapTap.Ground].
  */
-fun MapView.describeForAccessibility(description: String?) {
+private fun MapLibreMap.dispatchTap(
+    point: LatLng,
+    radiusPx: Float,
+    toleranceM: Double,
+    onTap: (MapTap) -> Unit
+) {
+    val screen = projection.toScreenLocation(point)
+    val box = hitBox(screen.x, screen.y, radiusPx)
+
+    idAt(box, LandMapOverlay.CORNER_LAYERS)?.let { return onTap(MapTap.Corner(it)) }
+    idAt(box, LandMapOverlay.PIN_LAYERS)?.let { return onTap(MapTap.Pin(it)) }
+    clickableShapeAt(box)?.let { return onTap(MapTap.Shape(it)) }
+
+    onTap(MapTap.Ground(GeoPoint(point.latitude, point.longitude), toleranceM))
+}
+
+private fun hitBox(x: Float, y: Float, radiusPx: Float) =
+    RectF(x - radiusPx, y - radiusPx, x + radiusPx, y + radiusPx)
+
+private fun MapLibreMap.idAt(box: RectF, layers: Array<String>): String? =
+    queryRenderedFeatures(box, *layers).firstNotNullOfOrNull { it.overlayId() }
+
+private fun MapLibreMap.clickableShapeAt(box: RectF): String? =
+    queryRenderedFeatures(box, *LandMapOverlay.SHAPE_LAYERS)
+        .firstOrNull { it.stringOrNull(LandMapOverlay.PROP_CLICKABLE) == LandMapOverlay.TRUE }
+        ?.overlayId()
+
+private fun Feature.overlayId(): String? = stringOrNull(LandMapOverlay.PROP_ID)
+
+/**
+ * A feature property, or null when it is absent.
+ *
+ * `getStringProperty` on its own assumes the property is there, and a feature from a
+ * layer this app did not add — a label from the basemap caught by a wide hit box —
+ * has none of these.
+ */
+private fun Feature.stringOrNull(key: String): String? =
+    if (hasNonNullValueForProperty(key)) getStringProperty(key) else null
+
+private fun MapView.describeForAccessibility(description: String?) {
     contentDescription = description
     importantForAccessibility =
         if (description == null) View.IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -309,163 +677,133 @@ fun MapView.describeForAccessibility(description: String?) {
 }
 
 /**
- * A boundary as it stands: a filled ring once it closes, a bare line before that.
+ * Drags a corner under the finger, and reports a short press as a selection.
  *
- * [onClick] null leaves the shape a readout and passes the touch to whatever is
- * underneath — which is what the corner picker needs, so a corner can still be
- * placed inside a shape already drawn. Given a callback, the whole plot becomes
- * the tap target, which on the map tab is a far easier thing to hit than a pin.
+ * Sits in front of the map's own gesture handling, and only claims a touch that
+ * starts on a corner — every other touch is handed straight back, so panning and
+ * pinching are untouched.
+ *
+ * Because it claims the whole gesture including the initial press, the map's click
+ * listener never sees a tap that began on a corner. That is why a release inside the
+ * touch slop is reported as a selection from here: without it, tapping a corner to
+ * select it would do nothing on exactly the screen where selecting corners matters.
  */
-fun MapView.drawBoundary(
-    points: List<LandGeoPoint>,
-    colour: Int,
-    onClick: (() -> Unit)? = null
+private class CornerDragger(
+    private val map: MapLibreMap,
+    private val slopPx: Float,
+    private val hitRadiusPx: Float,
+    private val onMove: (String, Double, Double) -> Unit,
+    private val onSelect: (String) -> Unit
 ) {
-    if (points.size < 2) return
-    val ring = points.map { GeoPoint(it.latitude, it.longitude) }
+    private var dragging: String? = null
+    private var moved = false
+    private var downX = 0f
+    private var downY = 0f
 
-    val overlay = if (points.size >= 3) {
-        Polygon(this).apply {
-            setPoints(ring)
-            fillPaint.color = AndroidColor.argb(
-                BOUNDARY_FILL_ALPHA,
-                AndroidColor.red(colour),
-                AndroidColor.green(colour),
-                AndroidColor.blue(colour)
-            )
-            outlinePaint.color = colour
-            outlinePaint.strokeWidth = 4f
-            setOnClickListener { _, _, _ ->
-                onClick?.invoke()
-                onClick != null
+    fun onTouch(event: MotionEvent): Boolean = when (event.actionMasked) {
+        MotionEvent.ACTION_DOWN -> {
+            val id = map.idAt(hitBox(event.x, event.y, hitRadiusPx), LandMapOverlay.CORNER_LAYERS)
+            dragging = id
+            moved = false
+            downX = event.x
+            downY = event.y
+            id != null
+        }
+
+        MotionEvent.ACTION_MOVE -> {
+            val id = dragging
+            if (id == null) {
+                false
+            } else {
+                // Nothing moves until the finger has travelled far enough to mean it.
+                // Corners are placed to the metre and a press that shifts three
+                // pixels is a tap, not a correction.
+                if (moved || hypot(event.x - downX, event.y - downY) >= slopPx) {
+                    moved = true
+                    val at = map.projection.fromScreenLocation(PointF(event.x, event.y))
+                    onMove(id, at.latitude, at.longitude)
+                }
+                true
             }
         }
-    } else {
-        Polyline(this).apply {
-            setPoints(ring)
-            outlinePaint.color = colour
-            outlinePaint.strokeWidth = 4f
-            setOnClickListener { _, _, _ ->
-                onClick?.invoke()
-                onClick != null
+
+        MotionEvent.ACTION_UP -> {
+            val id = dragging
+            dragging = null
+            if (id == null) {
+                false
+            } else {
+                if (!moved) onSelect(id)
+                true
             }
         }
+
+        MotionEvent.ACTION_CANCEL -> {
+            val had = dragging != null
+            dragging = null
+            had
+        }
+
+        // A second finger landing mid-drag stays with the drag rather than starting a
+        // pinch the map never saw the beginning of. The drag follows pointer zero, so
+        // it carries on from where it was.
+        else -> dragging != null
     }
-
-    overlays.add(overlay)
 }
 
-/** Where the phone is, so a drawing has a reference even over blank tiles. */
-fun MapView.drawLocationDot(latitude: Double, longitude: Double, title: String? = null) {
-    overlays.add(
-        Marker(this).apply {
-            position = GeoPoint(latitude, longitude)
-            this.title = title
-            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-            icon = ShapeDrawable(OvalShape()).apply {
-                intrinsicWidth = 28
-                intrinsicHeight = 28
-                paint.color = AndroidColor.parseColor(LOCATION_DOT_COLOUR)
-            }
-            setOnMarkerClickListener { _, _ -> true }
+/** Where the camera should end up, worked out before there is a map to ask. */
+private sealed interface CameraTarget {
+
+    data class Fit(val bounds: LatLngBounds) : CameraTarget
+
+    data class Centre(val at: LatLng, val zoom: Double) : CameraTarget
+
+    fun applyTo(map: MapLibreMap, animated: Boolean, paddingPx: Int) {
+        val update: CameraUpdate = when (this) {
+            is Fit -> CameraUpdateFactory.newLatLngBounds(bounds, usablePadding(map, paddingPx))
+            is Centre -> CameraUpdateFactory.newLatLngZoom(at, zoom)
         }
+        if (animated) map.animateCamera(update, ZOOM_ANIMATION_MS) else map.moveCamera(update)
+    }
+
+    /**
+     * Padding that still leaves something to fit into.
+     *
+     * A preview card is a couple of hundred pixels tall, and the default margin
+     * doubled would consume it — leaving MapLibre to fit a boundary into a strip of
+     * no height.
+     */
+    private fun usablePadding(map: MapLibreMap, paddingPx: Int): Int {
+        val smallest = minOf(map.width, map.height)
+        return paddingPx.coerceAtMost((smallest / 4f).toInt().coerceAtLeast(0))
+    }
+}
+
+/**
+ * The camera position that shows [points], or null when there is nothing to show.
+ *
+ * A set of points with no extent — one corner, or several recorded on the same spot —
+ * cannot be fitted to, so it becomes a centred view at [singlePointZoom] instead.
+ */
+private fun targetFor(points: List<GeoPoint>, singlePointZoom: Double): CameraTarget? {
+    val first = points.firstOrNull() ?: return null
+    var north = first.latitude
+    var south = first.latitude
+    var east = first.longitude
+    var west = first.longitude
+    for (point in points) {
+        if (point.latitude > north) north = point.latitude
+        if (point.latitude < south) south = point.latitude
+        if (point.longitude > east) east = point.longitude
+        if (point.longitude < west) west = point.longitude
+    }
+    if (north - south < DEGENERATE_SPAN && east - west < DEGENERATE_SPAN) {
+        return CameraTarget.Centre(LatLng(first.latitude, first.longitude), singlePointZoom)
+    }
+    return CameraTarget.Fit(
+        LatLngBounds.Builder()
+            .include(LatLng(north, east))
+            .include(LatLng(south, west))
+            .build()
     )
-}
-
-/**
- * A viewport that holds every point given, with room around it, or null when
- * there is nothing to frame.
- *
- * A single point has no extent, so it gets no box — the caller centres on it at
- * a chosen zoom instead, because a zero-sized box would fit to maximum zoom.
- */
-fun boundsOf(points: List<LandGeoPoint>): BoundingBox? {
-    if (points.size < 2) return null
-    val box = BoundingBox.fromGeoPointsSafe(
-        points.map { GeoPoint(it.latitude, it.longitude) }
-    )
-    // Two corners recorded on the same spot, or a walk that never moved, give a
-    // box with no extent — and fitting to that asks for maximum zoom over a
-    // blank field. Treat it as nothing to frame.
-    if (box.latitudeSpan <= 0.0 && box.longitudeSpan <= 0.0) return null
-    return box.increaseByScale(1.4f)
-}
-
-/**
- * Frames [points], or centres on the single one there is, or does nothing at all
- * when there is nothing to show yet — which the caller can tell from the false it
- * gets back.
- *
- * Posted rather than applied, because a bounding box cannot be fitted to a view
- * that has not been measured yet, and the first call always lands before layout.
- *
- * [animated] for a fit the user asked for by pressing a button, where the movement
- * is what tells them the button did something. Left off for the fit on opening: a
- * screen that flies in from a view of the whole planet is a slow way to say hello.
- */
-fun MapView.frame(
-    points: List<LandGeoPoint>,
-    singlePointZoom: Double = PARCEL_ZOOM,
-    animated: Boolean = false
-): Boolean {
-    boundsOf(points)?.let { box ->
-        post { zoomToBoundingBox(box, animated) }
-        return true
-    }
-    val single = points.firstOrNull() ?: return false
-    val centre = GeoPoint(single.latitude, single.longitude)
-    if (animated) {
-        controller.animateTo(centre, singlePointZoom, null)
-    } else {
-        controller.setZoom(singlePointZoom)
-        controller.setCenter(centre)
-    }
-    return true
-}
-
-/**
- * A round, numbered pin for one boundary corner.
- *
- * The number is drawn into the icon rather than left to an info window: the
- * order of the corners *is* the outline, so a user checking why an edge crosses
- * itself needs to read the sequence off the map directly.
- *
- * Sized in dp, unlike the plain dots elsewhere in this file, because a raw pixel
- * size that reads well on one screen becomes an unreadable speck on a dense one
- * once there is text inside it.
- */
-fun cornerMarkerIcon(
-    context: Context,
-    label: String,
-    colour: Int,
-    highlighted: Boolean = false
-): Drawable {
-    val density = context.resources.displayMetrics.density
-    val size = ((if (highlighted) CORNER_MARKER_DP * 1.4f else CORNER_MARKER_DP) * density).toInt()
-    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
-    val centre = size / 2f
-    val radius = centre - density
-
-    canvas.drawCircle(centre, centre, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = colour
-    })
-    // A white ring keeps the pin legible against grass, water and a dark tile
-    // set alike, and thickens when selected so the choice is visible at a glance.
-    canvas.drawCircle(centre, centre, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = AndroidColor.WHITE
-        style = Paint.Style.STROKE
-        strokeWidth = (if (highlighted) 3f else 1.5f) * density
-    })
-
-    val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = AndroidColor.WHITE
-        textAlign = Paint.Align.CENTER
-        textSize = size * if (label.length > 2) 0.38f else 0.5f
-        isFakeBoldText = true
-    }
-    // Centres the glyphs on the circle rather than on the text baseline.
-    canvas.drawText(label, centre, centre - (text.descent() + text.ascent()) / 2f, text)
-
-    return BitmapDrawable(context.resources, bitmap)
 }

@@ -4,6 +4,7 @@ object Routes {
     const val LIST = "lands"
     const val MAP = "map"
     const val SETTINGS = "settings"
+    const val OFFLINE = "offline_maps"
 
     const val DETAIL = "land/{landId}"
     const val EDIT = "land/{landId}/edit"

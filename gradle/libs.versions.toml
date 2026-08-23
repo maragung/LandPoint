@@ -11,7 +11,11 @@ navigation = "2.8.5"
 coroutines = "1.9.0"
 serialization = "1.7.3"
 coil = "2.7.0"
-osmdroid = "6.1.20"
+# 13.0.0 deliberately, not the newest: 13.1.0 and every release after it declare
+# kotlin-stdlib 2.2.10, whose metadata Kotlin 2.0.21 cannot read. 13.0.0 is the
+# last one still on 2.0.20, and it already carries everything this app needs —
+# OfflineManager, LocationComponent, the pmtiles:// scheme and HillshadeLayer.
+maplibre = "13.0.0"
 # 4.12.0 deliberately, not the newest: later builds require androidx.sqlite 2.7
 # and kotlin-stdlib 2.2, which would drag Room and the Kotlin compiler up with
 # them. This one asks for androidx.sqlite 2.2.0 — older than Room 2.6.1 already
@@ -53,8 +57,11 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
-osmdroid-android = { group = "org.osmdroid", name = "osmdroid-android", version.ref = "osmdroid" }
-osmdroid-mapsforge = { group = "org.osmdroid", name = "osmdroid-mapsforge", version.ref = "osmdroid" }
+# The OpenGL ES build, not the default android-sdk artifact: that one is the
+# Vulkan renderer (its native payload is byte-for-byte the size of
+# android-sdk-vulkan), and Vulkan on Android 9 is patchy. OpenGL is also 8 MB
+# smaller uncompressed. Identical Java API — same 530 classes, same four ABIs.
+maplibre-android = { group = "org.maplibre.gl", name = "android-sdk-opengl", version.ref = "maplibre" }
 sqlcipher-android = { group = "net.zetetic", name = "sqlcipher-android", version.ref = "sqlcipher" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }

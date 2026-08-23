@@ -21,8 +21,8 @@ android {
         applicationId = "com.landpoint.app"
         minSdk = 28
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.4.0"
+        versionCode = 6
+        versionName = "1.5.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         resourceConfigurations += listOf("en", "in")
     }
@@ -53,6 +53,22 @@ android {
         }
     }
 
+    // MapLibre and SQLCipher both ship native code for four ABIs, and a single APK
+    // carrying all eight libraries is roughly twice the size any one phone can use.
+    // Split them, and keep a universal APK as well: these builds are sideloaded from
+    // a GitHub release, so somebody who does not know their ABI needs one download
+    // that simply works. versionCode is deliberately the SAME across every split —
+    // there is no Play Store here to order them, and distinct codes would make
+    // swapping a per-ABI APK for the universal one look like a downgrade.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -69,12 +85,11 @@ android {
 
     packaging {
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}")
-        // SQLCipher ships a native library for four ABIs — 23 MB stored raw, 10 MB
-        // compressed. AGP 8 defaults to raw so the installer can mmap straight out
-        // of the APK, which is the right trade for a Play download that strips the
-        // other three ABIs on the way to the phone. This APK is sideloaded whole,
-        // over whatever connection the user has, so the 13 MB matters more than the
-        // handful of milliseconds saved at install time.
+        // AGP 8 stores .so files raw so the installer can mmap straight out of the
+        // APK, which is the right trade for a Play download. These builds are
+        // sideloaded whole over whatever connection the user has, so compressing
+        // MapLibre's and SQLCipher's native libraries — together the bulk of the
+        // download — matters more than the milliseconds saved at install time.
         jniLibs.useLegacyPackaging = true
     }
 
@@ -140,10 +155,10 @@ dependencies {
     // androidx.fragment, which is why MainActivity is a FragmentActivity.
     implementation(libs.androidx.biometric)
     implementation(libs.coil.compose)
-    implementation(libs.osmdroid.android)
-    // Renders vector .map files on the device. No tile server is involved, so an
-    // imported map costs nobody's bandwidth and works with the radio switched off.
-    implementation(libs.osmdroid.mapsforge)
+    // The map engine. Vector tiles, a style JSON the app can generate and store
+    // locally, and an offline region downloader — all without an API key and
+    // without Google Play Services.
+    implementation(libs.maplibre.android)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

@@ -7,21 +7,25 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.landpoint.app.PendingDeletes
 import com.landpoint.app.R
-import com.landpoint.app.data.CopyFailed
 import com.landpoint.app.data.LandRepository
-import com.landpoint.app.data.OfflineArchive
-import com.landpoint.app.data.OfflineMapStore
 import com.landpoint.app.data.SettingsRepository
-import com.landpoint.app.data.UnsupportedType
 import com.landpoint.app.data.db.DatabaseCipher
 import com.landpoint.app.data.db.DatabaseStorage
 import com.landpoint.app.data.export.BackupManager
 import com.landpoint.app.data.export.DuplicateStrategy
 import com.landpoint.app.data.export.ImportExportManager
 import com.landpoint.app.data.export.PdfExporter
+import com.landpoint.app.map.offline.ArchiveStore
+import com.landpoint.app.map.offline.CopyFailed
+import com.landpoint.app.map.offline.Damaged
+import com.landpoint.app.map.offline.OfflineArchive
+import com.landpoint.app.map.offline.OfflineDownloadCoordinator
+import com.landpoint.app.map.offline.PmtilesResult
+import com.landpoint.app.map.offline.UnsupportedType
 import com.landpoint.app.ui.container
 import com.landpoint.app.util.AppStrings
 import com.landpoint.app.util.Localization
+import com.landpoint.app.util.formatBytes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -42,7 +46,10 @@ data class SettingsUiState(
     val restorePrompt: RestorePrompt? = null,
     val landCount: Int = 0,
     val offlineArchives: List<OfflineArchive> = emptyList(),
-    val cachedTileBytes: Long = 0,
+    /** Bytes taken by imported archives, which the user can free by removing one. */
+    val archiveBytes: Long = 0,
+    /** How many areas have been downloaded, for the row that opens their screen. */
+    val downloadedAreas: Int = 0,
     val isBusy: Boolean = false,
     val message: String? = null
 )
@@ -64,7 +71,8 @@ private data class TaskState(
 /** Offline map state, read off the filesystem rather than from a Flow. */
 private data class OfflineState(
     val archives: List<OfflineArchive> = emptyList(),
-    val cachedTileBytes: Long = 0
+    val archiveBytes: Long = 0,
+    val downloadedAreas: Int = 0
 )
 
 class SettingsViewModel(
@@ -81,7 +89,8 @@ class SettingsViewModel(
     private val importExport: ImportExportManager,
     private val backupManager: BackupManager,
     private val pdfExporter: PdfExporter,
-    private val offlineMapStore: OfflineMapStore,
+    private val archiveStore: ArchiveStore,
+    private val downloads: OfflineDownloadCoordinator,
     private val strings: AppStrings,
     private val pendingDeletes: PendingDeletes
 ) : ViewModel() {
@@ -120,7 +129,8 @@ class SettingsViewModel(
             restorePrompt = task.restorePrompt,
             landCount = count,
             offlineArchives = maps.archives,
-            cachedTileBytes = maps.cachedTileBytes,
+            archiveBytes = maps.archiveBytes,
+            downloadedAreas = maps.downloadedAreas,
             isBusy = task.busy,
             message = task.message
         )
@@ -282,18 +292,29 @@ class SettingsViewModel(
 
     fun importCsv(uri: Uri) = importFrom(uri)
 
-    /** Re-reads the offline map directory; cheap enough to call on every visit. */
+    /**
+     * Re-reads what is stored offline; cheap enough to call on every visit.
+     *
+     * Two separate stores, and the distinction matters to the user: archives are
+     * files they brought themselves and can delete here, while downloaded areas live
+     * in MapLibre's own database and are managed on their own screen.
+     */
     fun refreshOfflineMaps() {
         viewModelScope.launch {
+            downloads.refresh()
             offline.value = OfflineState(
-                archives = offlineMapStore.archives(),
-                cachedTileBytes = offlineMapStore.cachedTileBytes()
+                archives = archiveStore.archives(),
+                archiveBytes = archiveStore.archiveBytes(),
+                downloadedAreas = downloads.saved.value.size
             )
         }
     }
 
+    /** The file types [importOfflineMap] can read, for the picker's hint. */
+    fun supportedArchiveTypes(): Set<String> = archiveStore.supportedExtensions()
+
     fun importOfflineMap(uri: Uri) = runTask {
-        val result = offlineMapStore.importArchive(uri)
+        val result = archiveStore.importArchive(uri)
         refreshOfflineMaps()
         when (val error = result.error) {
             null -> strings.get(R.string.msg_offline_map_added, result.name ?: "")
@@ -305,14 +326,54 @@ class SettingsViewModel(
                 R.string.msg_offline_map_failed,
                 error.reason ?: ""
             )
+            // A file that is the right type but not usable. Said as its own case
+            // because the fix differs per reason and only the reason knows which.
+            is Damaged -> strings.get(
+                R.string.msg_offline_map_damaged,
+                describe(error.reason)
+            )
+        }
+    }
+
+    /**
+     * Re-checks a stored archive against the checksum written when it was imported.
+     *
+     * Worth offering rather than only checking at import: these files are large, they
+     * sit on the phone for months, and a map that has quietly rotted draws nothing
+     * with no more explanation than an empty screen.
+     */
+    fun verifyOfflineMap(name: String) = runTask {
+        when (archiveStore.verify(name)) {
+            true -> strings.get(R.string.msg_offline_map_intact, name)
+            false -> strings.get(R.string.msg_offline_map_corrupt, name)
+            // Imported before checksums were recorded, so there is nothing to
+            // compare against. Not a failure, and not something to imply is one.
+            null -> strings.get(R.string.msg_offline_map_unverifiable, name)
         }
     }
 
     fun deleteOfflineMap(name: String) = runTask {
-        val deleted = offlineMapStore.deleteArchive(name)
+        val deleted = archiveStore.deleteArchive(name)
         refreshOfflineMaps()
         if (deleted) strings.get(R.string.msg_offline_map_removed, name)
         else strings.get(R.string.msg_offline_map_failed, name)
+    }
+
+    /** Why an archive was refused, in one clause that finishes the sentence. */
+    private fun describe(reason: PmtilesResult): String = when (reason) {
+        is PmtilesResult.Truncated -> strings.get(
+            R.string.pmtiles_truncated,
+            formatBytes(reason.actualBytes),
+            formatBytes(reason.expectedBytes)
+        )
+        is PmtilesResult.WrongVersion -> strings.get(R.string.pmtiles_wrong_version, reason.version)
+        PmtilesResult.NotPmtiles -> strings.get(R.string.pmtiles_not_pmtiles)
+        PmtilesResult.Unreadable -> strings.get(R.string.pmtiles_unreadable)
+        PmtilesResult.Empty -> strings.get(R.string.pmtiles_empty)
+        PmtilesResult.UnknownTileType -> strings.get(R.string.pmtiles_unknown_tiles)
+        // Never reached: an Ok header is not an error. Mapped anyway because a
+        // sealed `when` with no branch for it would not compile.
+        is PmtilesResult.Ok -> strings.get(R.string.pmtiles_not_pmtiles)
     }
 
     /** Both entry points funnel here — the manager sniffs the content itself. */
@@ -380,7 +441,8 @@ class SettingsViewModel(
                     c.importExport,
                     c.backupManager,
                     c.pdfExporter,
-                    c.offlineMapStore,
+                    c.archiveStore,
+                    c.offlineDownloads,
                     c.strings,
                     c.pendingDeletes
                 )

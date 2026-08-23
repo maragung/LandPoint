@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.landpoint.app.data.LandRepository
-import com.landpoint.app.data.OfflineMapStore
 import com.landpoint.app.data.SettingsRepository
 import com.landpoint.app.data.model.Land
 import com.landpoint.app.location.LocationProvider
@@ -17,11 +16,9 @@ import com.landpoint.app.util.PolygonMath
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import org.osmdroid.mapsforge.MapsForgeTileSource
 
 data class LandShapeUiState(
     val land: Land? = null,
@@ -36,7 +33,11 @@ data class LandShapeUiState(
     val isLoading: Boolean = true,
     val dms: Boolean = false,
     val areaUnit: SettingsRepository.AreaUnit = SettingsRepository.AreaUnit.SQM,
-    val currentLocation: Pair<Double, Double>? = null
+    /**
+     * Where the phone is, carrying the accuracy Android reported with it, so the
+     * map can draw a circle of that radius rather than a bare dot.
+     */
+    val currentLocation: GeoPoint? = null
 )
 
 /**
@@ -49,17 +50,12 @@ data class LandShapeUiState(
 class LandShapeViewModel(
     repository: LandRepository,
     private val locationProvider: LocationProvider,
-    private val offlineMapStore: OfflineMapStore,
     settings: SettingsRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     private val landId: String = checkNotNull(savedStateHandle["landId"])
-    private val currentLocation = MutableStateFlow<Pair<Double, Double>?>(null)
-
-    /** An open file handle rather than state — see `MapViewModel`. */
-    private val _vectorSource = MutableStateFlow<MapsForgeTileSource?>(null)
-    val vectorSource: StateFlow<MapsForgeTileSource?> = _vectorSource.asStateFlow()
+    private val currentLocation = MutableStateFlow<GeoPoint?>(null)
 
     val uiState: StateFlow<LandShapeUiState> = combine(
         repository.observeLand(landId),
@@ -88,21 +84,16 @@ class LandShapeViewModel(
 
     init {
         refreshLocation()
-        viewModelScope.launch {
-            _vectorSource.value = offlineMapStore.vectorTileSource()
-        }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        _vectorSource.value?.dispose()
-        _vectorSource.value = null
     }
 
     fun refreshLocation() {
         viewModelScope.launch {
-            locationProvider.getCurrentLocation()?.let {
-                currentLocation.value = it.latitude to it.longitude
+            locationProvider.getCurrentLocation()?.let { fix ->
+                currentLocation.value = GeoPoint(
+                    latitude = fix.latitude,
+                    longitude = fix.longitude,
+                    accuracyM = fix.accuracy?.toDouble()
+                )
             }
         }
     }
@@ -114,7 +105,6 @@ class LandShapeViewModel(
                 LandShapeViewModel(
                     c.repository,
                     c.locationProvider,
-                    c.offlineMapStore,
                     c.settings,
                     createSavedStateHandle()
                 )

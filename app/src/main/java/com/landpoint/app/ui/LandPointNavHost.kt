@@ -37,6 +37,7 @@ import com.landpoint.app.ui.lands.LandListDetailPane
 import com.landpoint.app.ui.lands.LandListScreen
 import com.landpoint.app.ui.map.MapScreen
 import com.landpoint.app.ui.navigation.Routes
+import com.landpoint.app.ui.offline.OfflineMapsScreen
 import com.landpoint.app.ui.settings.SettingsScreen
 import com.landpoint.app.ui.shape.LandShapeScreen
 
@@ -180,12 +181,19 @@ private fun LandPointGraph(
         // Map and Settings are tabs now, so neither gets a back arrow.
         composable(Routes.MAP) {
             MapScreen(
-                onOpenLand = { id -> navController.navigate(Routes.detail(id)) }
+                onOpenLand = { id -> navController.navigate(Routes.detail(id)) },
+                onOpenOfflineMaps = { navController.navigate(Routes.OFFLINE) }
             )
         }
 
         composable(Routes.SETTINGS) {
-            SettingsScreen()
+            SettingsScreen(
+                onOpenOfflineMaps = { navController.navigate(Routes.OFFLINE) }
+            )
+        }
+
+        composable(Routes.OFFLINE) {
+            OfflineMapsScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Routes.NEW) {

@@ -2,7 +2,6 @@ package com.landpoint.app
 
 import android.content.Context
 import com.landpoint.app.data.LandRepository
-import com.landpoint.app.data.OfflineMapStore
 import com.landpoint.app.data.PhotoStamper
 import com.landpoint.app.data.PhotoStore
 import com.landpoint.app.data.SettingsRepository
@@ -11,7 +10,15 @@ import com.landpoint.app.data.export.BackupManager
 import com.landpoint.app.data.export.ImportExportManager
 import com.landpoint.app.data.export.PdfExporter
 import com.landpoint.app.location.LocationProvider
+import com.landpoint.app.map.MapStyleFactory
+import com.landpoint.app.map.offline.ArchiveStore
+import com.landpoint.app.map.offline.OfflineDownloadCoordinator
+import com.landpoint.app.map.offline.OfflineRegionStore
+import com.landpoint.app.map.offline.OfflineStyleWriter
 import com.landpoint.app.util.AppStrings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * Hand-rolled dependency container. The graph is small enough that a DI
@@ -27,7 +34,45 @@ class AppContainer(context: Context) {
 
     val photoStamper: PhotoStamper by lazy { PhotoStamper(appContext, strings) }
 
-    val offlineMapStore: OfflineMapStore by lazy { OfflineMapStore(appContext) }
+    /**
+     * A scope that lives as long as the process, for work no screen owns.
+     *
+     * Only the offline download queue uses it, and it needs exactly this: a download
+     * has to keep running — and the next one in the queue has to start — while the user
+     * is somewhere else in the app or has put the phone in their pocket. A
+     * `viewModelScope` would cancel that the moment the offline screen closed.
+     *
+     * `SupervisorJob` so one failed download cannot take the queue down with it.
+     */
+    val appScope: CoroutineScope by lazy {
+        CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    }
+
+    /** Maps the user imported themselves. */
+    val archiveStore: ArchiveStore by lazy { ArchiveStore(appContext) }
+
+    /** Turns a chosen style into the JSON document MapLibre draws from. */
+    val mapStyleFactory: MapStyleFactory by lazy { MapStyleFactory(appContext.assets) }
+
+    private val offlineRegions: OfflineRegionStore by lazy { OfflineRegionStore(appContext) }
+
+    private val offlineStyleWriter: OfflineStyleWriter by lazy {
+        OfflineStyleWriter(appContext, appContext.assets)
+    }
+
+    /**
+     * Shared, like [pendingDeletes] and for the same reason: a download outlives the
+     * screen it was started from, and two coordinators would mean two queues each
+     * believing it was the only one running.
+     */
+    val offlineDownloads: OfflineDownloadCoordinator by lazy {
+        OfflineDownloadCoordinator(
+            context = appContext,
+            regions = offlineRegions,
+            styles = offlineStyleWriter,
+            scope = appScope
+        )
+    }
 
     val repository: LandRepository by lazy {
         LandRepository(LandDatabase.get(appContext).landDao(), photoStore)

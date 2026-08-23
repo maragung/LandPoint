@@ -296,7 +296,6 @@
     <!-- Peta -->
     <string name="map_title">Peta</string>
     <string name="map_my_location">Lokasi saya</string>
-    <string name="map_you_are_here">Anda di sini</string>
 
     <!-- Dibacakan sebagai pengganti peta: isi peta digambar ke satu kanvas,
          jadi pembaca layar tidak menemukan apa pun untuk dibacakan. -->
@@ -333,21 +332,30 @@
     <string name="settings_export_gpx">Ekspor GPX (aplikasi GPS)</string>
     <string name="settings_export_kml">Ekspor KML (Google Earth)</string>
     <string name="settings_section_offline">Peta luring</string>
-    <string name="settings_offline_explainer">Area peta yang pernah Anda buka tersimpan di perangkat ini dan tetap bisa dipakai tanpa sinyal. Untuk cakupan satu provinsi tanpa jaringan sama sekali, tambahkan berkas peta vektor (.map) — digambar langsung di HP Anda, jadi tidak memakai kuota. Arsip tile siap pakai (.mbtiles, .gemf, .zip) juga bisa.</string>
-    <string name="settings_offline_add">Tambah berkas peta luring</string>
-    <string name="settings_offline_get">Unduh peta gratis (OpenAndroMaps)</string>
-    <string name="settings_offline_get_hint">Peta vektor gratis per wilayah, dibuat dari data OpenStreetMap. Unduh berkas .map untuk daerah Anda lewat peramban, lalu tambahkan di sini.</string>
+    <string name="settings_offline_explainer">Ada dua cara bekerja tanpa sinyal. Unduh satu area peta jalan langsung dari dalam aplikasi, atau tambahkan berkas peta .pmtiles yang sudah Anda miliki — yang ini digambar di HP Anda dan sama sekali tidak memakai kuota.</string>
+    <string name="settings_offline_areas">Area yang sudah diunduh</string>
+    <string name="settings_offline_add">Tambah berkas peta (.pmtiles)</string>
+    <string name="settings_offline_get">Cara membuat berkas peta sendiri</string>
+    <string name="settings_offline_get_hint">Satu berkas .pmtiles memuat seluruh wilayah. Dokumentasi Protomaps menjelaskan cara memotongnya untuk daerah Anda lalu memindahkannya ke HP.</string>
     <string name="settings_offline_kind_vector">Peta vektor, digambar di perangkat ini</string>
     <string name="settings_offline_kind_raster">Arsip tile</string>
+    <string name="settings_offline_kind_unreadable">Rusak — tidak bisa digambar</string>
+    <string name="settings_offline_verify">Periksa</string>
     <string name="map_attribution_osm">© Kontributor OpenStreetMap</string>
-    <string name="settings_offline_cached">Petak peta tersimpan: %1$s</string>
+    <string name="settings_offline_files">Berkas peta yang diimpor: %1$s</string>
     <string name="settings_offline_none">Belum ada berkas peta</string>
+    <plurals name="settings_offline_areas_saved">
+        <item quantity="other">%1$d area tersimpan</item>
+    </plurals>
     <string name="action_remove">Hapus</string>
     <string name="settings_restore_archive">Pulihkan cadangan lengkap</string>
     <string name="settings_restore_json">Pulihkan dari JSON</string>
     <string name="settings_import_csv">Impor CSV</string>
     <string name="settings_duplicate_prompt">Bila lokasi yang diimpor sudah ada:</string>
     <string name="settings_about_privacy">Semua data tetap di perangkat ini. Tanpa akun, tanpa pelacakan, tanpa unggahan. Peta berasal dari OpenStreetMap dan disimpan sementara agar bisa dipakai luring setelah dibuka sekali.</string>
+    <!-- Licence conditions of the map assets shipped inside the APK, shown where a
+         reader will find them rather than buried in a repository file. -->
+    <string name="settings_about_licences">Aset peta di aplikasi ini: gaya dan ikon dari OpenFreeMap Liberty, turunan OSM Liberty (BSD-3-Clause); huruf memakai Noto Sans (SIL Open Font License 1.1); penggambaran oleh MapLibre Native (BSD-2-Clause). Data peta © kontributor OpenStreetMap (ODbL).</string>
     <string name="settings_version">LandPoint %1$s</string>
 
     <string name="language_system">Ikuti sistem</string>
@@ -407,6 +415,16 @@
     <string name="msg_offline_map_removed">Peta luring dihapus: %1$s</string>
     <string name="msg_offline_map_unsupported">Jenis berkas peta tidak didukung: .%1$s</string>
     <string name="msg_offline_map_failed">Tidak bisa menambah peta luring: %1$s</string>
+    <string name="msg_offline_map_damaged">Berkas peta ini tidak bisa dipakai: %1$s</string>
+    <string name="msg_offline_map_intact">%1$s utuh</string>
+    <string name="msg_offline_map_corrupt">%1$s berubah sejak ditambahkan, jadi mungkin sudah tidak tergambar dengan benar</string>
+    <string name="msg_offline_map_unverifiable">%1$s ditambahkan sebelum checksum dicatat, jadi tidak ada pembanding untuk memeriksanya</string>
+    <string name="pmtiles_truncated">berkas ini hanya memuat %1$s dari %2$s yang seharusnya, jadi unduhannya terputus</string>
+    <string name="pmtiles_wrong_version">ini PMTiles versi %1$d, sedangkan aplikasi ini membaca versi 3</string>
+    <string name="pmtiles_not_pmtiles">ini bukan berkas peta PMTiles</string>
+    <string name="pmtiles_unreadable">berkas tidak bisa dibaca</string>
+    <string name="pmtiles_empty">tidak ada tile peta di dalamnya</string>
+    <string name="pmtiles_unknown_tiles">format tile-nya tidak bisa digambar aplikasi ini</string>
     <string name="msg_pdf_generic">Ekspor PDF gagal</string>
     <plurals name="msg_report_saved">
         <item quantity="other">Laporan tersimpan (%1$d lokasi)</item>
@@ -493,7 +511,12 @@
     <string name="basemap_terrain_summary">Garis kontur dan bayangan bukit, untuk tanah berlereng. Perlu koneksi.</string>
     <string name="basemap_imported">Peta offline</string>
     <string name="basemap_imported_summary">Berkas peta yang tersimpan di HP ini. Bisa tanpa sinyal.</string>
-    <string name="basemap_imported_missing">Impor berkas .map di Setelan untuk memakainya.</string>
+    <string name="basemap_imported_missing">Impor berkas .pmtiles di Setelan untuk memakainya.</string>
+    <!-- Why a style cannot be saved for offline use. Shown next to the disabled
+         download control: a control that is off for no stated reason reads as a bug. -->
+    <string name="offline_refused_satellite">Esri tidak mengizinkan citranya disimpan untuk dipakai offline. Untuk punya foto udara tanpa sinyal, impor arsip yang Anda berhak simpan.</string>
+    <string name="offline_refused_terrain">OpenTopoMap dijalankan sukarelawan dan ketentuannya tidak mengizinkan pengunduhan tile secara massal.</string>
+    <string name="offline_refused_imported">Peta ini sudah ada di HP Anda.</string>
     <!-- Floating map controls. -->
     <string name="map_zoom_in">Perbesar</string>
     <string name="map_zoom_out">Perkecil</string>
@@ -502,4 +525,44 @@
     <string name="map_attribution_topo">© OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)</string>
     <string name="corner_picker_show_controls">Tampilkan alat sudut</string>
     <string name="corner_picker_hide_controls">Sembunyikan alat sudut, perluas peta</string>
+    <!-- Layar peta offline: membingkai area di peta, menghitung biayanya, dan
+         daftar yang sudah tersimpan. -->
+    <string name="offline_title">Peta offline</string>
+    <string name="offline_a11y_map">Peta untuk memilih area yang disimpan. Isi kotak dijelaskan di bawah peta.</string>
+    <string name="offline_frame_hint">Geser dan perbesar peta sampai tanah yang Anda mau ada di dalam kotak.</string>
+    <string name="offline_name_label">Nama area</string>
+    <string name="offline_default_name">Area %1$d</string>
+    <string name="offline_detail">Kerincian: zoom %1$d sampai %2$d</string>
+    <string name="offline_estimate">%1$s tile · sekitar %2$s · %3$s km²</string>
+    <string name="offline_estimate_waiting">Menghitung isi kotak…</string>
+    <string name="offline_capped">Tile sumber ini berhenti di zoom %1$d. Peta tetap tajam lebih dekat dari itu karena tingkat berikutnya digambar di HP dari data yang sama.</string>
+    <string name="offline_start">Unduh area ini</string>
+    <string name="offline_saved_open">Tersimpan (%1$d)</string>
+    <string name="offline_saved_title">Area tersimpan</string>
+    <string name="offline_saved_empty">Belum ada area tersimpan. Bingkai satu area di peta lalu unduh.</string>
+    <string name="offline_area_unnamed">Area tanpa nama</string>
+    <string name="offline_area_extent">Zoom %1$d–%2$d · %3$s km²</string>
+    <string name="offline_area_ready">Siap · %1$s di HP ini</string>
+    <string name="offline_area_partial">Dijeda · %1$s sudah tersimpan</string>
+    <string name="offline_area_working">Mengunduh · %1$s tile, %2$s</string>
+    <string name="offline_area_ceiling">Berhenti: area ini butuh lebih banyak tile daripada yang disimpan aplikasi. Bagian yang sudah terunduh tetap bisa dipakai.</string>
+    <string name="offline_pause">Jeda</string>
+    <string name="offline_resume">Lanjutkan</string>
+    <string name="offline_update">Segarkan</string>
+    <string name="offline_rename">Ganti nama</string>
+    <string name="offline_rename_title">Ganti nama area</string>
+    <string name="offline_delete_title">Hapus %1$s?</string>
+    <string name="offline_delete_body">Tile-nya dihapus dari HP. Area ini bisa diunduh lagi nanti.</string>
+    <string name="offline_clear_cache">Bersihkan cache penjelajahan</string>
+    <string name="offline_verdict_nothing">Geser peta sampai area yang Anda mau ada di dalam kotak.</string>
+    <string name="offline_verdict_area">Kotak ini mencakup %1$s km², melewati batas %2$s km² untuk satu area. Perbesar peta.</string>
+    <string name="offline_verdict_tiles">Itu berarti %1$s tile peta, melewati batas %2$s. Kurangi kerincian atau perbesar peta.</string>
+    <string name="offline_verdict_regions">%1$d area tersimpan adalah batas yang disimpan aplikasi ini. Hapus satu dulu.</string>
+    <string name="offline_verdict_space">Ini butuh sekitar %1$s sedangkan sisa ruang HP %2$s.</string>
+    <string name="msg_offline_area_started">Mengunduh %1$s</string>
+    <string name="msg_offline_area_failed">Unduhan tidak bisa dimulai.</string>
+    <string name="msg_offline_area_paused">Unduhan dijeda</string>
+    <string name="msg_offline_area_renamed">Nama diubah menjadi %1$s</string>
+    <string name="msg_offline_area_deleted">Area dihapus: %1$s</string>
+    <string name="msg_offline_cache_cleared">Cache penjelajahan dibersihkan</string>
 </resources>

@@ -1,13 +1,12 @@
 package com.landpoint.app.ui.map
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -15,31 +14,25 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.landpoint.app.R
-import com.landpoint.app.data.model.Land
 import com.landpoint.app.ui.components.BasemapSheet
+import com.landpoint.app.ui.components.LandMap
 import com.landpoint.app.ui.components.MapAttribution
 import com.landpoint.app.ui.components.MapFitAction
+import com.landpoint.app.ui.components.MapFix
+import com.landpoint.app.ui.components.MapOfflineAction
+import com.landpoint.app.ui.components.MapPin
+import com.landpoint.app.ui.components.MapScaleBar
+import com.landpoint.app.ui.components.MapShape
 import com.landpoint.app.ui.components.MapSideControls
 import com.landpoint.app.ui.components.MapStyleAction
+import com.landpoint.app.ui.components.MapTap
 import com.landpoint.app.ui.components.MapTopChrome
-import com.landpoint.app.ui.components.addScaleBar
-import com.landpoint.app.ui.components.applyTileTheme
-import com.landpoint.app.ui.components.describeForAccessibility
-import com.landpoint.app.ui.components.drawBoundary
-import com.landpoint.app.ui.components.drawLocationDot
-import com.landpoint.app.ui.components.frame
-import com.landpoint.app.ui.components.rememberBasemapChoice
-import com.landpoint.app.ui.components.rememberLandMapView
-import com.landpoint.app.ui.components.zoomInAStep
-import com.landpoint.app.ui.components.zoomOutAStep
-import com.landpoint.app.util.GeoPoint as LandGeoPoint
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
+import com.landpoint.app.ui.components.rememberLandMapController
+import com.landpoint.app.ui.components.rememberMapPrefs
+import com.landpoint.app.util.GeoPoint
 
 /** Where a single record sits comfortably on screen with its surroundings. */
 private const val SINGLE_LAND_ZOOM = 16.0
@@ -58,22 +51,13 @@ private const val SINGLE_LAND_ZOOM = 16.0
 fun MapScreen(
     onBack: (() -> Unit)? = null,
     onOpenLand: (String) -> Unit,
+    onOpenOfflineMaps: () -> Unit,
     viewModel: MapViewModel = viewModel(factory = MapViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val vectorSource by viewModel.vectorSource.collectAsStateWithLifecycle()
-    val isDark = isSystemInDarkTheme()
-    val boundaryColour = MaterialTheme.colorScheme.primary.toArgb()
-
-    val basemap = rememberBasemapChoice(hasVectorMap = vectorSource != null)
-    val mapView = rememberLandMapView(
-        vectorSource = vectorSource,
-        basemap = basemap.mode,
-        initialZoom = 4.5
-    )
-
-    // Fit-to-content should happen once per visit, not once per process.
-    val hasCentred = remember(mapView) { mutableStateOf(false) }
+    val prefs = rememberMapPrefs()
+    val controller = rememberLandMapController()
+    val accent = MaterialTheme.colorScheme.primary.toArgb()
 
     // Everything worth having on screen: boundary corners where a land has them,
     // its pin where it does not, and failing both, wherever the phone is. Measured
@@ -81,16 +65,24 @@ fun MapScreen(
     // fitting to pins alone cuts the far edge off a large field.
     val framePoints = remember(state.lands, state.boundaries, state.currentLocation) {
         val saved = state.lands.flatMap { land ->
-            state.boundaries[land.id] ?: listOf(LandGeoPoint(land.latitude, land.longitude))
+            state.boundaries[land.id] ?: listOf(GeoPoint(land.latitude, land.longitude))
         }
-        saved.ifEmpty {
-            state.currentLocation?.let { (lat, lon) -> listOf(LandGeoPoint(lat, lon)) }
-                ?: emptyList()
-        }
+        saved.ifEmpty { listOfNotNull(state.currentLocation) }
     }
 
-    // Resolved here because the AndroidView update block is not composable.
-    val youAreHere = stringResource(R.string.map_you_are_here)
+    val shapes = remember(state.boundaries) {
+        state.boundaries.map { (id, ring) -> MapShape(id = id, points = ring, clickable = true) }
+    }
+    val pins = remember(state.lands) {
+        state.lands.map { MapPin(id = it.id, latitude = it.latitude, longitude = it.longitude) }
+    }
+    val fix = state.currentLocation?.let {
+        MapFix(latitude = it.latitude, longitude = it.longitude, accuracyM = it.accuracyM)
+    }
+
+    // Fitting to content happens once per visit and survives rotation, so turning
+    // the phone does not throw the camera back to where the screen opened.
+    LaunchedEffect(framePoints) { controller.frameOnce(framePoints, SINGLE_LAND_ZOOM) }
 
     // What a screen reader gets instead of the map. Counts rather than names:
     // a list of every plot read out on entering the tab would be unusable,
@@ -107,39 +99,24 @@ fun MapScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        AndroidView(
-            factory = { mapView },
+        LandMap(
+            style = prefs.style,
+            controller = controller,
+            accentColour = accent,
             modifier = Modifier.fillMaxSize(),
-            update = { map ->
-                map.applyTileTheme(isDark, basemap.mode)
-                map.describeForAccessibility(mapDescription)
-
-                map.overlays.clear()
-
-                // Shapes first, pins second: osmdroid hands a touch to the
-                // topmost overlay, and the pin has to stay reachable inside
-                // its own plot. Both open the same record either way.
-                state.lands.forEach { land ->
-                    state.boundaries[land.id]?.let { ring ->
-                        map.drawBoundary(ring, boundaryColour) { onOpenLand(land.id) }
-                    }
+            shapes = shapes,
+            pins = pins,
+            fix = fix,
+            contentDescription = mapDescription,
+            // A plot is reachable by its pin and by its outline, and both open the
+            // record: the pin is the smaller target but the only one a plot without
+            // a mapped boundary has.
+            onTap = { tap ->
+                when (tap) {
+                    is MapTap.Pin -> onOpenLand(tap.id)
+                    is MapTap.Shape -> onOpenLand(tap.id)
+                    else -> Unit
                 }
-
-                state.lands.forEach { land ->
-                    map.overlays.add(land.toMarker(map, onOpenLand))
-                }
-
-                state.currentLocation?.let { (lat, lon) ->
-                    map.drawLocationDot(lat, lon, youAreHere)
-                }
-
-                map.addScaleBar()
-
-                if (!hasCentred.value && map.frame(framePoints, SINGLE_LAND_ZOOM)) {
-                    hasCentred.value = true
-                }
-
-                map.invalidate()
             }
         )
 
@@ -148,58 +125,51 @@ fun MapScreen(
             onBack = onBack,
             title = stringResource(R.string.map_title),
             actions = {
-                MapFitAction { mapView.frame(framePoints, SINGLE_LAND_ZOOM, animated = true) }
-                MapStyleAction { basemap.showSheet() }
+                MapFitAction { controller.frame(framePoints, SINGLE_LAND_ZOOM, animated = true) }
+                MapOfflineAction(onOpenOfflineMaps)
+                MapStyleAction { prefs.showSheet() }
             }
         )
 
         MapSideControls(
             modifier = Modifier.align(Alignment.CenterEnd),
-            onZoomIn = mapView::zoomInAStep,
-            onZoomOut = mapView::zoomOutAStep,
+            onZoomIn = controller::zoomIn,
+            onZoomOut = controller::zoomOut,
             // Always offered, unlike on the screens that are handed a position:
             // this one can go and ask for a fresh fix, so the button has
             // something to do even before there is a dot to jump to.
             onMyLocation = {
                 viewModel.refreshLocation()
-                state.currentLocation?.let { (lat, lon) ->
-                    mapView.frame(
-                        listOf(LandGeoPoint(lat, lon)),
-                        SINGLE_LAND_ZOOM,
-                        animated = true
-                    )
+                state.currentLocation?.let {
+                    controller.frame(listOf(it), SINGLE_LAND_ZOOM, animated = true)
                 }
             }
+        )
+
+        MapScaleBar(
+            controller = controller,
+            imperial = prefs.imperial,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(horizontal = 8.dp, vertical = 6.dp)
         )
 
         // Required, not decorative: every style here is somebody else's work, shown
         // on the condition that it is credited where it is drawn.
         MapAttribution(
-            basemap.mode,
+            prefs.mode,
             Modifier
                 .align(Alignment.BottomEnd)
                 .padding(horizontal = 8.dp, vertical = 6.dp)
         )
 
-        if (basemap.sheetVisible) {
+        if (prefs.sheetVisible) {
             BasemapSheet(
-                current = basemap.mode,
-                hasVectorMap = basemap.hasVectorMap,
-                onPick = basemap::select,
-                onDismiss = basemap::hideSheet
+                current = prefs.mode,
+                hasVectorMap = prefs.hasVectorMap,
+                onPick = prefs::select,
+                onDismiss = prefs::hideSheet
             )
         }
     }
 }
-
-private fun Land.toMarker(map: MapView, onOpenLand: (String) -> Unit): Marker =
-    Marker(map).apply {
-        position = GeoPoint(latitude, longitude)
-        title = name
-        snippet = address ?: description.takeIf { it.isNotBlank() }
-        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-        setOnMarkerClickListener { _, _ ->
-            onOpenLand(this@toMarker.id)
-            true
-        }
-    }

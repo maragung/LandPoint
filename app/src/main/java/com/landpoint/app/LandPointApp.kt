@@ -1,8 +1,7 @@
 package com.landpoint.app
 
 import android.app.Application
-import android.content.Context
-import org.osmdroid.config.Configuration
+import com.landpoint.app.map.MapLibreInit
 
 class LandPointApp : Application() {
 
@@ -13,11 +12,9 @@ class LandPointApp : Application() {
         super.onCreate()
         container = AppContainer(this)
 
-        // osmdroid needs a writable base dir and a non-default user agent, or the
-        // OSM tile servers reject the requests. load() first so the stored
-        // preferences cannot overwrite the paths the store just set.
-        Configuration.getInstance()
-            .load(this, getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
-        container.offlineMapStore.configure()
+        // Before any MapView is constructed, and here rather than on a map screen
+        // because it loads the native rendering library — a cost worth paying while
+        // the launcher icon is still animating instead of on the first frame of a map.
+        MapLibreInit.start(this)
     }
 }

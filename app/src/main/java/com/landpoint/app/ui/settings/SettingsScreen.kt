@@ -61,13 +61,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.landpoint.app.BuildConfig
 import com.landpoint.app.R
-import com.landpoint.app.data.MapKind
 import com.landpoint.app.data.SettingsRepository
 import com.landpoint.app.data.db.DatabaseStorage
 import com.landpoint.app.data.export.BackupManager
 import com.landpoint.app.data.export.DuplicateStrategy
+import com.landpoint.app.map.offline.MapKind
 import com.landpoint.app.ui.security.AppLockState
 import com.landpoint.app.ui.security.deviceCanAuthenticate
+import com.landpoint.app.util.formatBytes
 
 /**
  * [onBack] is null when this is reached as a bottom-bar tab: there is nothing
@@ -78,6 +79,7 @@ import com.landpoint.app.ui.security.deviceCanAuthenticate
 @Composable
 fun SettingsScreen(
     onBack: (() -> Unit)? = null,
+    onOpenOfflineMaps: () -> Unit,
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -371,14 +373,27 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                // Downloaded areas get a row of their own rather than a list here:
+                // they have progress, they can be paused, and each one is a rectangle
+                // on a map — none of which reads as a line of text in a settings list.
+                ActionRow(
+                    label = stringResource(R.string.settings_offline_areas) + " · " +
+                        pluralStringResource(
+                            R.plurals.settings_offline_areas_saved,
+                            state.downloadedAreas,
+                            state.downloadedAreas
+                        ),
+                    enabled = true,
+                    onClick = onOpenOfflineMaps
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                 Text(
                     stringResource(
-                        R.string.settings_offline_cached,
-                        formatBytes(state.cachedTileBytes)
+                        R.string.settings_offline_files,
+                        formatBytes(state.archiveBytes)
                     ),
                     style = MaterialTheme.typography.bodyMedium
                 )
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                 if (state.offlineArchives.isEmpty()) {
                     Text(
                         stringResource(R.string.settings_offline_none),
@@ -400,12 +415,21 @@ fun SettingsScreen(
                                             MapKind.VECTOR -> R.string.settings_offline_kind_vector
                                             MapKind.RASTER_ARCHIVE ->
                                                 R.string.settings_offline_kind_raster
+                                            // Readable as a file, but its header did
+                                            // not survive; saying so beats a size with
+                                            // no explanation of why nothing draws.
+                                            MapKind.UNREADABLE ->
+                                                R.string.settings_offline_kind_unreadable
                                         }
                                     ) + " · " + formatBytes(archive.bytes),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                            TextButton(
+                                onClick = { viewModel.verifyOfflineMap(archive.name) },
+                                enabled = !state.isBusy
+                            ) { Text(stringResource(R.string.settings_offline_verify)) }
                             TextButton(
                                 onClick = { viewModel.deleteOfflineMap(archive.name) },
                                 enabled = !state.isBusy
@@ -417,8 +441,8 @@ fun SettingsScreen(
                     stringResource(R.string.settings_offline_add),
                     enabled = !state.isBusy
                 ) {
-                    // "*/*" because .mbtiles and .map have no registered MIME
-                    // type, so a narrower filter would grey the file out.
+                    // "*/*" because .pmtiles has no registered MIME type, so a
+                    // narrower filter would grey out the only file that works.
                     importOfflineMap.launch(arrayOf("*/*"))
                 }
                 Text(
@@ -439,7 +463,7 @@ fun SettingsScreen(
                     // uncaught ActivityNotFoundException here would take the
                     // settings screen down with it.
                     runCatching {
-                        uriHandler.openUri("https://www.openandromaps.org/en/downloads")
+                        uriHandler.openUri("https://docs.protomaps.com/")
                     }.onFailure { viewModel.showMessage(noBrowserMessage) }
                 }
             }
@@ -461,6 +485,14 @@ fun SettingsScreen(
                 )
                 Text(
                     stringResource(R.string.legal_disclaimer),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                // The map style, its icons and its lettering are all inside the APK
+                // under licences that ask to be named. On screen rather than in a
+                // repository file, because that is where the condition is met.
+                Text(
+                    stringResource(R.string.settings_about_licences),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -759,18 +791,6 @@ private fun ActionRow(label: String, enabled: Boolean, onClick: () -> Unit) {
     ) {
         Text(label)
     }
-}
-
-/**
- * Locale.US on purpose — this is a size, and the app's own decimal-comma rules
- * do not apply to it. Binary units, because that is what a file manager shows.
- */
-private fun formatBytes(bytes: Long): String = when {
-    bytes <= 0 -> "0 MB"
-    bytes < 1024L * 1024 -> String.format(java.util.Locale.US, "%.1f KB", bytes / 1024.0)
-    bytes < 1024L * 1024 * 1024 ->
-        String.format(java.util.Locale.US, "%.1f MB", bytes / (1024.0 * 1024))
-    else -> String.format(java.util.Locale.US, "%.2f GB", bytes / (1024.0 * 1024 * 1024))
 }
 
 /**

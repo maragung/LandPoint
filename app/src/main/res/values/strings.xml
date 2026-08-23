@@ -307,7 +307,6 @@
     <!-- Map -->
     <string name="map_title">Map</string>
     <string name="map_my_location">My location</string>
-    <string name="map_you_are_here">You are here</string>
 
     <!-- Spoken in place of a map. Everything a map shows - tiles, plots, pins -
          is painted onto one canvas, so a screen reader walking the screen finds
@@ -347,21 +346,31 @@
     <string name="settings_export_gpx">Export GPX (GPS apps)</string>
     <string name="settings_export_kml">Export KML (Google Earth)</string>
     <string name="settings_section_offline">Offline maps</string>
-    <string name="settings_offline_explainer">Map areas you have already viewed stay saved on this device and keep working without signal. To cover a whole province with no network at all, add a vector map file (.map) — it is drawn on your phone, so it uses no data. Prepared tile archives (.mbtiles, .gemf, .zip) also work.</string>
-    <string name="settings_offline_add">Add offline map file</string>
-    <string name="settings_offline_get">Download free maps (OpenAndroMaps)</string>
-    <string name="settings_offline_get_hint">Free vector maps per region, made from OpenStreetMap data. Download the .map file for your area in a browser, then add it here.</string>
+    <string name="settings_offline_explainer">Two ways to work with no signal. Download an area of the street map from inside the app, or add a .pmtiles map file you already have — that one is drawn on your phone and uses no data at all.</string>
+    <string name="settings_offline_areas">Downloaded areas</string>
+    <string name="settings_offline_add">Add map file (.pmtiles)</string>
+    <string name="settings_offline_get">How to make your own map file</string>
+    <string name="settings_offline_get_hint">One .pmtiles file holds a whole region. The Protomaps documentation explains how to cut one for your area and put it on the phone.</string>
     <string name="settings_offline_kind_vector">Vector map, drawn on this device</string>
     <string name="settings_offline_kind_raster">Tile archive</string>
+    <string name="settings_offline_kind_unreadable">Damaged — cannot be drawn</string>
+    <string name="settings_offline_verify">Check</string>
     <string name="map_attribution_osm">© OpenStreetMap contributors</string>
-    <string name="settings_offline_cached">Saved map tiles: %1$s</string>
+    <string name="settings_offline_files">Imported map files: %1$s</string>
     <string name="settings_offline_none">No map files added</string>
+    <plurals name="settings_offline_areas_saved">
+        <item quantity="one">%1$d area saved</item>
+        <item quantity="other">%1$d areas saved</item>
+    </plurals>
     <string name="action_remove">Remove</string>
     <string name="settings_restore_archive">Restore full backup</string>
     <string name="settings_restore_json">Restore from JSON</string>
     <string name="settings_import_csv">Import CSV</string>
     <string name="settings_duplicate_prompt">When an imported location already exists:</string>
     <string name="settings_about_privacy">Everything stays on this device. No account, no tracking, no upload. Map tiles come from OpenStreetMap and are cached for offline use once viewed.</string>
+    <!-- Licence conditions of the map assets shipped inside the APK, shown where a
+         reader will find them rather than buried in a repository file. -->
+    <string name="settings_about_licences">Map assets in this app: style and icons from OpenFreeMap Liberty, derived from OSM Liberty (BSD-3-Clause); lettering set in Noto Sans (SIL Open Font License 1.1); rendering by MapLibre Native (BSD-2-Clause). Map data © OpenStreetMap contributors (ODbL).</string>
     <string name="settings_version">LandPoint %1$s</string>
 
     <string name="language_system">Follow system</string>
@@ -424,6 +433,16 @@
     <string name="msg_offline_map_removed">Offline map removed: %1$s</string>
     <string name="msg_offline_map_unsupported">Unsupported map file type: .%1$s</string>
     <string name="msg_offline_map_failed">Could not add the offline map: %1$s</string>
+    <string name="msg_offline_map_damaged">This map file cannot be used: %1$s</string>
+    <string name="msg_offline_map_intact">%1$s is intact</string>
+    <string name="msg_offline_map_corrupt">%1$s has changed since it was added, so it may no longer draw correctly</string>
+    <string name="msg_offline_map_unverifiable">%1$s was added before checksums were kept, so there is nothing to check it against</string>
+    <string name="pmtiles_truncated">the file holds %1$s of the %2$s it says it should, so the download was cut short</string>
+    <string name="pmtiles_wrong_version">it is PMTiles version %1$d, and this app reads version 3</string>
+    <string name="pmtiles_not_pmtiles">it is not a PMTiles map file</string>
+    <string name="pmtiles_unreadable">the file could not be read</string>
+    <string name="pmtiles_empty">it holds no map tiles</string>
+    <string name="pmtiles_unknown_tiles">its tiles are in a format this app cannot draw</string>
     <string name="msg_pdf_generic">PDF export failed</string>
     <plurals name="msg_report_saved">
         <item quantity="one">Report saved (%1$d location)</item>
@@ -513,7 +532,12 @@
     <string name="basemap_terrain_summary">Contour lines and hill shading, for sloping ground. Needs a connection.</string>
     <string name="basemap_imported">Offline map</string>
     <string name="basemap_imported_summary">The map file stored on this phone. Works with no signal.</string>
-    <string name="basemap_imported_missing">Import a .map file in Settings to use this.</string>
+    <string name="basemap_imported_missing">Import a .pmtiles file in Settings to use this.</string>
+    <!-- Why a style cannot be saved for offline use. Shown next to the disabled
+         download control: a control that is off for no stated reason reads as a bug. -->
+    <string name="offline_refused_satellite">Esri does not permit its imagery to be stored for offline use. To have photographs without a signal, import an archive you are licensed to hold.</string>
+    <string name="offline_refused_terrain">OpenTopoMap is run by volunteers and its terms do not permit downloading tiles in bulk.</string>
+    <string name="offline_refused_imported">This map is already on your phone.</string>
     <!-- Floating map controls. -->
     <string name="map_zoom_in">Zoom in</string>
     <string name="map_zoom_out">Zoom out</string>
@@ -522,4 +546,44 @@
     <string name="map_attribution_topo">© OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)</string>
     <string name="corner_picker_show_controls">Show the corner tools</string>
     <string name="corner_picker_hide_controls">Hide the corner tools, show more map</string>
+    <!-- Offline maps screen: framing an area on the map, costing it, and the
+         list of what is already saved. -->
+    <string name="offline_title">Offline maps</string>
+    <string name="offline_a11y_map">Map for choosing an area to save. What the frame covers is described below the map.</string>
+    <string name="offline_frame_hint">Move and zoom the map until the ground you want is inside the frame.</string>
+    <string name="offline_name_label">Area name</string>
+    <string name="offline_default_name">Area %1$d</string>
+    <string name="offline_detail">Detail: zoom %1$d to %2$d</string>
+    <string name="offline_estimate">%1$s tiles · about %2$s · %3$s km²</string>
+    <string name="offline_estimate_waiting">Measuring the frame…</string>
+    <string name="offline_capped">These tiles stop at zoom %1$d. The map still sharpens past that, because the closer levels are drawn on the phone from the same data.</string>
+    <string name="offline_start">Download this area</string>
+    <string name="offline_saved_open">Saved (%1$d)</string>
+    <string name="offline_saved_title">Saved areas</string>
+    <string name="offline_saved_empty">No areas saved yet. Frame one on the map and download it.</string>
+    <string name="offline_area_unnamed">Unnamed area</string>
+    <string name="offline_area_extent">Zoom %1$d–%2$d · %3$s km²</string>
+    <string name="offline_area_ready">Ready · %1$s on this phone</string>
+    <string name="offline_area_partial">Paused · %1$s saved so far</string>
+    <string name="offline_area_working">Downloading · %1$s tiles, %2$s</string>
+    <string name="offline_area_ceiling">Stopped: this area needs more tiles than the app will store. What it has already saved still works.</string>
+    <string name="offline_pause">Pause</string>
+    <string name="offline_resume">Resume</string>
+    <string name="offline_update">Refresh</string>
+    <string name="offline_rename">Rename</string>
+    <string name="offline_rename_title">Rename area</string>
+    <string name="offline_delete_title">Delete %1$s?</string>
+    <string name="offline_delete_body">Its tiles are removed from the phone. The area can be downloaded again later.</string>
+    <string name="offline_clear_cache">Clear browsing cache</string>
+    <string name="offline_verdict_nothing">Move the map so the area you want is inside the frame.</string>
+    <string name="offline_verdict_area">The frame covers %1$s km², over the %2$s km² limit for one area. Zoom in.</string>
+    <string name="offline_verdict_tiles">That would be %1$s map tiles, over the limit of %2$s. Lower the detail or zoom in.</string>
+    <string name="offline_verdict_regions">%1$d saved areas is the most this app keeps. Delete one first.</string>
+    <string name="offline_verdict_space">This needs about %1$s and the phone has %2$s free.</string>
+    <string name="msg_offline_area_started">Downloading %1$s</string>
+    <string name="msg_offline_area_failed">The download could not be started.</string>
+    <string name="msg_offline_area_paused">Download paused</string>
+    <string name="msg_offline_area_renamed">Renamed to %1$s</string>
+    <string name="msg_offline_area_deleted">Area deleted: %1$s</string>
+    <string name="msg_offline_cache_cleared">Browsing cache cleared</string>
 </resources>

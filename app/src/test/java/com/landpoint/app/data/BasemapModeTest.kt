@@ -101,4 +101,28 @@ class BasemapModeTest {
         assertNull(BasemapMode.IMPORTED.maxZoom)
         assertTrue(BasemapMode.TERRAIN.maxZoom!! < BasemapMode.SATELLITE.maxZoom!!)
     }
+
+    @Test
+    fun `only the street tiles may be saved for offline use`() {
+        // A licence decision, not a technical one: all three online sources could
+        // be downloaded, and only one of them permits it. Spelled out per mode so
+        // that adding a source cannot quietly inherit permission it was never
+        // granted.
+        assertTrue(BasemapMode.STREET.allowsOfflineDownload)
+        assertFalse(BasemapMode.SATELLITE.allowsOfflineDownload)
+        assertFalse(BasemapMode.TERRAIN.allowsOfflineDownload)
+        // Nothing to download — it is already a file on the phone.
+        assertFalse(BasemapMode.IMPORTED.allowsOfflineDownload)
+    }
+
+    @Test
+    fun `a style that cannot be downloaded says why`() {
+        // A download button greyed out with no explanation reads as a fault in the
+        // app. Every refusal therefore carries a sentence to show in its place.
+        BasemapMode.entries.filterNot { it.allowsOfflineDownload }.forEach {
+            assertNotNull("$it must explain why it cannot be downloaded", it.offlineRefusalRes)
+        }
+        // And the one that can be downloaded has nothing to explain.
+        assertNull(BasemapMode.STREET.offlineRefusalRes)
+    }
 }

@@ -192,7 +192,7 @@ class GeoUtilsTest {
     @Test
     fun `a side crossing the antimeridian gives a longitude a map can place`() {
         // 179.99° E heading east: the raw formula walks past 180 and produces a
-        // figure osmdroid would refuse.
+        // figure no map projection will place.
         val point = GeoUtils.destination(0.0, 179.99, 90.0, 5_000.0)
         assertTrue(
             "longitude ${point.longitude} out of range",

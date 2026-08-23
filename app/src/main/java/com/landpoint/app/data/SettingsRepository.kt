@@ -24,6 +24,7 @@ class SettingsRepository(private val context: Context) {
         val LANGUAGE = stringPreferencesKey("language")           // system | en | in
         val AREA_UNIT = stringPreferencesKey("area_unit")         // AreaUnit.key
         val BASEMAP = stringPreferencesKey("basemap")             // BasemapMode.key
+        val OFFLINE_MAP = stringPreferencesKey("offline_map")      // archive file name
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val APP_LOCK = booleanPreferencesKey("app_lock")
         val SECURE_SCREEN = booleanPreferencesKey("secure_screen")
@@ -142,6 +143,20 @@ class SettingsRepository(private val context: Context) {
     }
 
     /**
+     * File name of the imported archive [BasemapMode.IMPORTED] draws.
+     *
+     * A name rather than a path, so the preference survives the app being moved
+     * between internal storage locations — which happens on a restore to a new
+     * phone. Null means the user has never chosen, and whoever reads this picks a
+     * sensible archive; null is also what a stale name resolves to once the file it
+     * named has been deleted, so a deleted map cannot leave the setting pointing at
+     * nothing.
+     */
+    val offlineMap: Flow<String?> = context.settingsDataStore.data.map {
+        it[Keys.OFFLINE_MAP]?.takeIf { name -> name.isNotBlank() }
+    }
+
+    /**
      * Off by default: the green palette is the app's identity, so wallpaper
      * colours are something a user opts into rather than the other way round.
      */
@@ -221,6 +236,11 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setBasemap(mode: BasemapMode) = context.settingsDataStore.edit {
         it[Keys.BASEMAP] = mode.key
+    }
+
+    /** [name] null clears the choice, which is what deleting the archive does. */
+    suspend fun setOfflineMap(name: String?) = context.settingsDataStore.edit {
+        if (name == null) it.remove(Keys.OFFLINE_MAP) else it[Keys.OFFLINE_MAP] = name
     }
 
     suspend fun setDynamicColor(enabled: Boolean) = context.settingsDataStore.edit {

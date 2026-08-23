@@ -11,7 +11,6 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.createSavedStateHandle
 import com.landpoint.app.R
 import com.landpoint.app.data.LandRepository
-import com.landpoint.app.data.OfflineMapStore
 import com.landpoint.app.data.PhotoStamper
 import com.landpoint.app.data.PhotoStore
 import com.landpoint.app.data.SettingsRepository
@@ -31,7 +30,6 @@ import com.landpoint.app.util.CornerDraft
 import com.landpoint.app.util.GeoPoint
 import com.landpoint.app.util.GeoUtils
 import com.landpoint.app.util.PolygonMath
-import org.osmdroid.mapsforge.MapsForgeTileSource
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -207,7 +205,6 @@ class LandEditViewModel(
     private val photoStore: PhotoStore,
     private val photoStamper: PhotoStamper,
     private val strings: AppStrings,
-    private val offlineMapStore: OfflineMapStore,
     settings: SettingsRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -216,20 +213,14 @@ class LandEditViewModel(
     val uiState: StateFlow<LandEditUiState> = _uiState.asStateFlow()
 
     /**
-     * Kept out of [LandEditUiState] because it is an open file handle, not state.
-     * Opened when the picker opens and disposed when it closes, so an edit
-     * session that never touches the map never holds a `.map` file open.
+     * Where the phone is right now, for the picker's "you are here" dot, with the
+     * accuracy Android reported alongside it so the map can draw a circle of that
+     * radius rather than a bare point. Kept apart from the form's
+     * latitude/longitude, which on an existing land are the saved coordinates and
+     * say nothing about where the user is standing.
      */
-    private val _vectorSource = MutableStateFlow<MapsForgeTileSource?>(null)
-    val vectorSource: StateFlow<MapsForgeTileSource?> = _vectorSource.asStateFlow()
-
-    /**
-     * Where the phone is right now, for the picker's "you are here" dot. Kept
-     * apart from the form's latitude/longitude, which on an existing land are
-     * the saved coordinates and say nothing about where the user is standing.
-     */
-    private val _currentLocation = MutableStateFlow<Pair<Double, Double>?>(null)
-    val currentLocation: StateFlow<Pair<Double, Double>?> = _currentLocation.asStateFlow()
+    private val _currentLocation = MutableStateFlow<GeoPoint?>(null)
+    val currentLocation: StateFlow<GeoPoint?> = _currentLocation.asStateFlow()
 
     private val landId: String? = savedStateHandle["landId"]
 
@@ -243,17 +234,10 @@ class LandEditViewModel(
     private var walkJob: Job? = null
 
     override fun onCleared() {
-        // A walk left running would keep the GPS on with nothing listening.
+        // A walk left running would keep the GPS on with nothing listening. The
+        // map itself needs no unwinding here: a style is a document, not a handle.
         walkJob?.cancel()
-        // Backstop: the picker disposes this itself, but the screen can die with
-        // the map still open and a leaked handle keeps the .map file locked.
-        releaseVectorSource()
         super.onCleared()
-    }
-
-    private fun releaseVectorSource() {
-        _vectorSource.value?.dispose()
-        _vectorSource.value = null
     }
 
     init {
@@ -752,15 +736,13 @@ class LandEditViewModel(
         }
 
         viewModelScope.launch {
-            // Null when no .map file has been imported. The picker still works —
-            // it just draws on a blank background.
-            _vectorSource.value = offlineMapStore.vectorTileSource()
-        }
-
-        viewModelScope.launch {
             if (!locationProvider.hasPermission()) return@launch
-            locationProvider.getCurrentLocation()?.let {
-                _currentLocation.value = it.latitude to it.longitude
+            locationProvider.getCurrentLocation()?.let { fix ->
+                _currentLocation.value = GeoPoint(
+                    latitude = fix.latitude,
+                    longitude = fix.longitude,
+                    accuracyM = fix.accuracy?.toDouble()
+                )
             }
         }
     }
@@ -768,7 +750,6 @@ class LandEditViewModel(
     /** Accepts the drawn shape as the boundary. */
     fun commitCornerPicker() {
         cornerJob?.cancel()
-        releaseVectorSource()
         _uiState.update {
             it.copy(
                 boundary = it.draftPoints,
@@ -786,7 +767,6 @@ class LandEditViewModel(
         // An averaged capture left running would keep the radio on and write
         // into a draft nobody is looking at any more.
         cornerJob?.cancel()
-        releaseVectorSource()
         _uiState.update {
             it.copy(
                 draftBoundary = emptyList(),
@@ -1182,7 +1162,6 @@ class LandEditViewModel(
                     c.photoStore,
                     c.photoStamper,
                     c.strings,
-                    c.offlineMapStore,
                     c.settings,
                     createSavedStateHandle()
                 )
