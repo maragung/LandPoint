@@ -24,10 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -71,8 +71,29 @@ jobs:
               grep -v 'Execution failed for task' |
               head -n 60
           }
+          # A failing test is named by Gradle but explained only in its XML result,
+          # and that file is uploaded as an artifact an unauthenticated reader
+          # cannot download. The assertion itself is what makes a red test
+          # actionable, so it is lifted out here with the stack that produced it.
+          failures() {
+            awk '
+              /<testcase / {
+                split($0, a, "name=\""); split(a[2], b, "\""); test = b[1]
+                split($0, c, "classname=\""); split(c[2], d, "\""); cls = d[1]
+              }
+              /<failure|<error/ { show = 1; print "FAILED " cls " > " test }
+              show {
+                gsub(/<[^>]*>/, "")
+                gsub(/&quot;/, "\"")
+                gsub(/&lt;/, "<"); gsub(/&gt;/, ">"); gsub(/&amp;/, "\\&")
+                if (length($0)) { print; lines++ }
+              }
+              /<\/failure>|<\/error>/ { show = 0 }
+              lines > 120 { exit }
+            ' app/build/test-results/testDebugUnitTest/*.xml 2>/dev/null
+          }
           ls -l gradle-tests.log gradle-build.log 2>&1 | sed 's/^/log: /'
-          details=$(summarise gradle-tests.log gradle-build.log)
+          details=$(summarise gradle-tests.log gradle-build.log; failures)
           if [ -z "$details" ]; then
             details=$(tail -n 40 gradle-tests.log gradle-build.log 2>/dev/null)
           fi
@@ -91,6 +112,7 @@ jobs:
             echo
             echo '```'
             summarise gradle-tests.log gradle-build.log
+            failures
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 

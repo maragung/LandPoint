@@ -177,10 +177,26 @@ class LocationProvider(private val context: Context) {
     }
 
     /**
-     * Continuous location updates — used for in-app compass / bearing mode.
+     * Continuous location updates.
+     *
+     * The two arguments are what makes adaptive tracking possible: `LocationManager`
+     * fixes an interval at subscription time and offers no way to change it
+     * afterwards, so a caller that wants to slow down re-subscribes with a longer
+     * one (see [LocationTracker]). The defaults are what the compass and the
+     * boundary editor have always used, so callers that do not care are unaffected.
+     *
+     * @param intervalMs the shortest gap between fixes the app is asking for. A
+     *   request, not a guarantee: the platform may deliver more slowly, and may
+     *   deliver faster because another app is asking for more.
+     * @param minDistanceM how far the phone must move before a further fix is worth
+     *   reporting. Zero means report everything, which is what a stationary user
+     *   waiting for the accuracy to improve needs.
      */
     @SuppressLint("MissingPermission")
-    fun observeLocation(): Flow<LocationData> = callbackFlow {
+    fun observeLocation(
+        intervalMs: Long = DEFAULT_INTERVAL_MS,
+        minDistanceM: Float = DEFAULT_MIN_DISTANCE_M
+    ): Flow<LocationData> = callbackFlow {
         val listener = LocationListener { location ->
             trySend(location.toLocationData())
         }
@@ -199,8 +215,8 @@ class LocationProvider(private val context: Context) {
             providers.forEach { provider ->
                 locationManager.requestLocationUpdates(
                     provider,
-                    1000L,
-                    5f,
+                    intervalMs,
+                    minDistanceM,
                     listener,
                     android.os.Looper.getMainLooper()
                 )
@@ -363,6 +379,14 @@ class LocationProvider(private val context: Context) {
         provider = provider,
         timestamp = time
     )
+
+    private companion object {
+        /** One fix a second: the cadence the compass and the corner picker expect. */
+        const val DEFAULT_INTERVAL_MS = 1_000L
+
+        /** Five metres: below a typical urban fix's own uncertainty. */
+        const val DEFAULT_MIN_DISTANCE_M = 5f
+    }
 
     private fun Address.toSingleLine(): String {
         val parts = listOfNotNull(
