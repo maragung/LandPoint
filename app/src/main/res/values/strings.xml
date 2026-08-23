@@ -235,6 +235,10 @@
     <string name="boundary_walk_hint">For a boundary too long or too overgrown to stand on every corner. Walk the full edge and come back to where you started. Corner-by-corner stays the more accurate method.</string>
     <string name="boundary_walk_recording">Recording · %1$s walked</string>
     <string name="msg_walk_started">Walk the boundary and tap Finish walk when you return to the start</string>
+    <string name="msg_walk_start_failed">Recording could not start. Android only allows it while LandPoint is open — try again from this screen.</string>
+    <string name="notif_walk_channel">Boundary recording</string>
+    <string name="notif_walk_channel_body">Shown while a boundary is being recorded on foot, with a button to finish it.</string>
+    <string name="notif_walk_title">Recording a boundary</string>
     <string name="msg_walk_too_short">Walk not recorded — too few usable GPS points. Try again in the open, or use Add corner.</string>
     <plurals name="msg_walk_done">
         <item quantity="one">Walk finished · %1$d corner</item>

@@ -90,6 +90,7 @@ import com.landpoint.app.R
 import com.landpoint.app.data.SettingsRepository
 import com.landpoint.app.location.FixQuality
 import com.landpoint.app.ui.components.rememberLocationPermission
+import com.landpoint.app.ui.components.rememberNotificationPermission
 import com.landpoint.app.util.AreaFormat
 import com.landpoint.app.util.BoundaryEdits
 import com.landpoint.app.util.GeoPoint
@@ -123,6 +124,7 @@ fun LandEditScreen(
             pendingLocationAction = null
         }
     )
+    val askForNotifications = rememberNotificationPermission()
     val blockedMessage = stringResource(R.string.permission_blocked_body)
     val withLocation: (() -> Unit) -> Unit = { action ->
         when {
@@ -268,7 +270,15 @@ fun LandEditScreen(
                     onPickOnMap = viewModel::openCornerPicker,
                     onUndo = viewModel::undoBoundaryPoint,
                     onClear = viewModel::clearBoundary,
-                    onStartWalk = { withLocation(viewModel::startWalk) },
+                    // The notification ask comes first: it is the walk's only control
+                    // once the phone is locked, and asking now — with a walk about to
+                    // start — is the one moment it explains itself.
+                    onStartWalk = {
+                        withLocation {
+                            askForNotifications()
+                            viewModel.startWalk()
+                        }
+                    },
                     onStopWalk = viewModel::stopWalk,
                     onAddManual = viewModel::addBoundaryPointManual,
                     onUpdateCorner = viewModel::updateBoundaryPoint,

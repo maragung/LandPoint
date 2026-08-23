@@ -21,7 +21,7 @@ import com.landpoint.app.data.model.LandEntity
 import com.landpoint.app.location.AveragedFix
 import com.landpoint.app.location.FixQuality
 import com.landpoint.app.location.FixSource
-import com.landpoint.app.location.GeoSample
+import com.landpoint.app.location.WalkRecorder
 import com.landpoint.app.location.WalkTrack
 import com.landpoint.app.ui.container
 import com.landpoint.app.util.AppStrings
@@ -34,7 +34,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
@@ -202,6 +201,7 @@ private const val CROSSING_CHECK_LIMIT = 60
 class LandEditViewModel(
     private val repository: LandRepository,
     private val locationProvider: com.landpoint.app.location.LocationProvider,
+    private val walkRecorder: WalkRecorder,
     private val photoStore: PhotoStore,
     private val photoStamper: PhotoStamper,
     private val strings: AppStrings,
@@ -230,13 +230,19 @@ class LandEditViewModel(
     /** Separate from [captureJob] so a corner capture cannot cancel the main fix. */
     private var cornerJob: Job? = null
 
-    /** The walk-around recording, cancelled by stopWalk or by leaving the screen. */
+    /**
+     * Watches the walk in progress. Not the recording itself — that belongs to the
+     * service, which is why a locked screen does not interrupt it.
+     */
     private var walkJob: Job? = null
 
     override fun onCleared() {
-        // A walk left running would keep the GPS on with nothing listening. The
-        // map itself needs no unwinding here: a style is a document, not a handle.
         walkJob?.cancel()
+        // Leaving the editor ends the walk. The service exists so a *locked screen*
+        // keeps recording, not so recording outlives the screen that would show the
+        // result: a walk still running here would hold the GPS open for a boundary
+        // nobody can see or finish.
+        if (walkRecorder.state.value.running) walkRecorder.stop()
         super.onCleared()
     }
 
@@ -429,6 +435,13 @@ class LandEditViewModel(
             return
         }
 
+        // Android refuses a foreground service started from the background, and a
+        // walk that is not being recorded must not look like one that is.
+        if (!walkRecorder.start()) {
+            _uiState.update { it.copy(message = strings.get(R.string.msg_walk_start_failed)) }
+            return
+        }
+
         // A walk replaces whatever boundary was on screen; warn by way of the
         // undo button rather than a dialog, but never merge two different shapes.
         _uiState.update {
@@ -441,33 +454,24 @@ class LandEditViewModel(
             )
         }
 
+        // Recording runs in a foreground service and the track lives outside this
+        // ViewModel, so what is left here is to follow it. That is also how a walk
+        // ended from the notification reaches the screen: the state simply stops
+        // being a running one, and [finishWalk] takes it from there.
         walkJob = viewModelScope.launch {
-            val track = mutableListOf<GeoPoint>()
-            locationProvider.observeLocation()
-                .catch { /* stream ended, e.g. permission revoked mid-walk */ }
-                .collect { location ->
-                    val sample = GeoSample(
-                        latitude = location.latitude,
-                        longitude = location.longitude,
-                        altitude = location.altitude,
-                        accuracy = location.accuracy,
-                        timestamp = location.timestamp
-                    )
-                    if (!WalkTrack.accept(track.lastOrNull(), sample)) return@collect
-                    track += GeoPoint(
-                        sample.latitude,
-                        sample.longitude,
-                        sample.accuracy?.toDouble()
-                    )
-                    val progress = WalkTrack.progressOf(track)
-                    _uiState.update {
-                        it.copy(
-                            walkPoints = progress.points,
-                            walkedM = progress.walkedM,
-                            boundary = track.toList()
-                        )
-                    }
+            walkRecorder.state.collect { walk ->
+                if (!walk.running) {
+                    finishWalk(walk.track, failed = walk.failed)
+                    return@collect
                 }
+                _uiState.update {
+                    it.copy(
+                        walkPoints = walk.progress.points,
+                        walkedM = walk.progress.walkedM,
+                        boundary = walk.track
+                    )
+                }
+            }
         }
     }
 
@@ -480,23 +484,46 @@ class LandEditViewModel(
      */
     fun stopWalk() {
         if (!_uiState.value.isWalking) return
+        // Stopping the recorder is enough: it ends the session, the observer above
+        // sees a walk that is no longer running, and the finish happens in one place
+        // whether the tap came from here or from the notification.
+        walkRecorder.stop()
+    }
+
+    /**
+     * Turns a finished recording into a boundary, or explains why there is none.
+     *
+     * Three outcomes, kept apart because the answer to each is different: Android
+     * refused to start the service, the walk ran but gathered too few usable fixes,
+     * or there is a ring to keep.
+     */
+    private fun finishWalk(track: List<GeoPoint>, failed: Boolean) {
         walkJob?.cancel()
         walkJob = null
 
         _uiState.update { state ->
-            val closed = WalkTrack.close(state.boundary)
-            if (closed.size < WalkTrack.MIN_POINTS) {
-                state.copy(
+            val closed = if (failed) emptyList() else WalkTrack.close(track)
+            when {
+                failed -> state.copy(
+                    isWalking = false,
+                    walkPoints = 0,
+                    walkedM = 0.0,
+                    boundary = emptyList(),
+                    message = strings.get(R.string.msg_walk_start_failed)
+                )
+
+                closed.size < WalkTrack.MIN_POINTS -> state.copy(
                     isWalking = false,
                     walkPoints = 0,
                     walkedM = 0.0,
                     boundary = emptyList(),
                     message = strings.get(R.string.msg_walk_too_short)
                 )
-            } else {
-                state.copy(
+
+                else -> state.copy(
                     isWalking = false,
                     walkPoints = closed.size,
+                    walkedM = state.walkedM,
                     boundary = closed,
                     message = strings.plural(R.plurals.msg_walk_done, closed.size)
                 )
@@ -1159,6 +1186,7 @@ class LandEditViewModel(
                 LandEditViewModel(
                     c.repository,
                     c.locationProvider,
+                    c.walkRecorder,
                     c.photoStore,
                     c.photoStamper,
                     c.strings,

@@ -225,6 +225,10 @@
     <string name="boundary_walk_hint">Untuk batas yang terlalu panjang atau terlalu rimbun untuk didatangi tiap sudutnya. Berjalanlah menyusuri seluruh tepi lalu kembali ke titik awal. Cara sudut-per-sudut tetap lebih akurat.</string>
     <string name="boundary_walk_recording">Merekam · %1$s berjalan</string>
     <string name="msg_walk_started">Susuri batas bidang, lalu ketuk Selesai berjalan setibanya kembali di titik awal</string>
+    <string name="msg_walk_start_failed">Perekaman tidak bisa dimulai. Android hanya mengizinkannya selagi LandPoint terbuka — coba lagi dari layar ini.</string>
+    <string name="notif_walk_channel">Perekaman batas</string>
+    <string name="notif_walk_channel_body">Muncul selagi batas direkam sambil berjalan, dengan tombol untuk mengakhirinya.</string>
+    <string name="notif_walk_title">Merekam batas</string>
     <string name="msg_walk_too_short">Jalur tidak terekam — titik GPS yang layak terlalu sedikit. Coba lagi di ruang terbuka, atau pakai Tambah sudut.</string>
     <plurals name="msg_walk_done">
         <item quantity="other">Selesai berjalan · %1$d sudut</item>

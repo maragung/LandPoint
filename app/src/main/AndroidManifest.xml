@@ -6,6 +6,20 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!--
+      Only for recording a boundary on foot: the walk has to keep going with the
+      phone in a pocket and the screen locked, and a foreground service is the one
+      way Android allows that. Nothing else in the app runs in the background.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!--
+      The walk notification carries its own Finish button, so it is worth asking for
+      from API 33. Refusing it does not stop a walk — Android still lists the service
+      in its task manager, and the editor keeps its own Finish button.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.compass" android:required="false" />
@@ -41,6 +55,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          Typed as a location service, which API 34 and up require: the type is what
+          tells the platform which runtime permission backs the service, and a
+          mismatch is a crash on start rather than a warning.
+        -->
+        <service
+            android:name=".location.WalkTrackService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

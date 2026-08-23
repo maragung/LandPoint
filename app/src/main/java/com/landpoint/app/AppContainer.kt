@@ -13,6 +13,8 @@ import com.landpoint.app.location.DeviceSensors
 import com.landpoint.app.location.GnssSignal
 import com.landpoint.app.location.LocationProvider
 import com.landpoint.app.location.LocationTracker
+import com.landpoint.app.location.ServiceWalkRecorder
+import com.landpoint.app.location.WalkRecorder
 import com.landpoint.app.map.MapStyleFactory
 import com.landpoint.app.map.offline.ArchiveStore
 import com.landpoint.app.map.offline.OfflineDownloadCoordinator
@@ -103,6 +105,15 @@ class AppContainer(context: Context) {
             sensors = DeviceSensors(appContext)
         )
     }
+
+    /**
+     * How a boundary walk is started and stopped.
+     *
+     * Held here so the editor's ViewModel never sees a Context: the walk runs in a
+     * foreground service, and starting one is the only part of recording that needs
+     * the application object.
+     */
+    val walkRecorder: WalkRecorder by lazy { ServiceWalkRecorder(appContext) }
 
     val importExport: ImportExportManager by lazy { ImportExportManager(appContext, repository) }
 
