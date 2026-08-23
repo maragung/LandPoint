@@ -10,9 +10,13 @@ remembering.
 
 ## Install
 
-1. Download `LandPoint-<version>-release.apk` from the
-   [latest release](https://github.com/maragung/LandPoint/releases/latest), and copy
-   it to your phone (USB, Bluetooth, Google Drive, email — whatever you prefer).
+1. Download one APK from the
+   [latest release](https://github.com/maragung/LandPoint/releases/latest). Five are
+   listed, and they differ only in which processor's map and database engines they
+   carry: **`LandPoint-<version>-arm64-v8a.apk`** fits almost every phone made since
+   2016 and is the one to start with, and `LandPoint-<version>-universal.apk` works
+   on anything at the cost of being larger. Copy it to your phone (USB, Bluetooth,
+   Google Drive, email — whatever you prefer).
 2. Open it with the phone's file manager.
 3. Android will ask permission to install apps from this source — allow it for
    the file manager / browser you used. This is normal for any app that does not
@@ -48,17 +52,44 @@ shapes. Maps fill the screen: no app bar, no bottom bar, just the ground and a
 few floating controls — zoom in and out, jump to where you are standing, fit
 everything back on screen, and change the map style. Tap a marker or a plot to
 open the record; open a record's boundary full screen to see its numbered
-corners, area and perimeter. Tiles you have already viewed stay cached, so a map
-you loaded at home still works in a field with no signal.
+corners, area and perimeter. Rotating the phone keeps the camera where you left
+it. Tiles you have already viewed stay cached, so a map you loaded at home still
+works in a field with no signal.
+
+**Where you are, in full** — a panel on the map reads out latitude, longitude,
+accuracy in metres, altitude, speed, bearing, the time of the fix, which receiver
+it came from, how many satellites are in use and how strong they are. The circle
+around the position marker is the accuracy Android reported, drawn to scale, so it
+shrinks as the fix improves. Fixes are averaged by their own stated accuracy,
+readings that disagree with the rest are dropped, and the update rate loosens once
+the fix is good and the phone is still — no invented precision, and no radio held
+at full rate in a pocket.
 
 **Four map styles**, chosen once and used by every map in the app:
 
 | Style | What it shows | Source |
 | --- | --- | --- |
-| Street | Roads, names, buildings. The default, and the lightest on data. | OpenStreetMap |
+| Street | Roads, names, buildings, drawn from vector tiles so the labels stay sharp at any zoom. The default, and the lightest on data. | OpenFreeMap Liberty, from OpenStreetMap data |
 | Satellite | The ground itself — roofs, trees, field edges — so a corner can be checked against something you can see. | Esri World Imagery (Esri, Maxar, Earthstar Geographics) |
 | Terrain | Contours and hill shading, for sloping or terraced land. | OpenTopoMap (CC-BY-SA) |
-| Offline map | A vector map file you imported yourself. The only style that needs no network at all. | your `.map` file |
+| Imported | A map file you copied onto the phone yourself. Needs no network at all. | your `.pmtiles` archive |
+
+**Offline maps** — frame a rectangle on the map, pick how much detail to keep, and
+the app shows the tile count, the estimated size and the area in km² before
+anything is downloaded. One download runs at a time, with progress, pause, resume
+and cancel; it survives the app being killed, because the tiles and their
+bookkeeping live in the map engine's own database rather than in memory. Saved
+areas can be renamed, refreshed and deleted, and the map serves them by itself the
+moment the phone loses signal. Limits are enforced rather than suggested: a maximum
+area, a maximum tile count, a check for free space, and a cap on how many areas are
+kept.
+
+Only Street can be downloaded. The imagery and terrain servers are somebody else's
+bandwidth and their terms forbid bulk caching, so those buttons are disabled *with
+the reason on them* instead of quietly missing. For photographs without a signal,
+import a PMTiles archive you are licensed to hold — its header and size are checked
+before it is accepted, so a half-finished copy is refused with an explanation
+rather than opening as an empty map.
 
 Aerial imagery is a **visual reference, not evidence**: it is a photograph of one
 day, it can be a year or more old, and a fence built since will not be in it.
@@ -75,6 +106,8 @@ else in the Android share sheet.
 - **JSON** — complete backup, restores everything exactly.
 - **CSV** — opens in Excel, Google Sheets or LibreOffice.
 - **PDF** — a formatted report, either for one location or for all of them.
+- **GPX and KML** — open in Google Earth, OsmAnd, QGIS and most GPS software;
+  boundaries travel as closed rings, not just their centre points.
 
 **Import** — restore a JSON backup or bring in a CSV from elsewhere. Column
 names are matched flexibly (`lat`/`latitude`, `lng`/`longitude`/`long`,
@@ -93,8 +126,10 @@ Everything stays on the phone.
 - The only permission the app requires is location. Camera and photo access are
   asked for only when you actually attach a photo, and files are read and written
   through Android's document picker, so no storage permission is needed at all.
-- Internet access is used for one thing: downloading OpenStreetMap map tiles.
-  Skip the map screen and the app never touches the network.
+- Internet access is used for one thing: map tiles — vector tiles from
+  OpenFreeMap, imagery from Esri, contours from OpenTopoMap. Skip the map screen
+  and the app never touches the network; download an area or import your own map
+  file and it stops needing to even there.
 
 ### Encryption at rest
 
@@ -145,8 +180,12 @@ Gradle 8.11.1.
 source env.sh            # sets JAVA_HOME, ANDROID_HOME, PATH
 gradle assembleDebug     # debug APK
 gradle testDebugUnitTest # unit tests
-gradle assembleRelease   # signed release APK
+gradle assembleRelease   # signed release APKs — four per-ABI plus one universal
 ```
+
+Every push is compiled, tested and release-built by GitHub Actions
+(`.github/workflows/build.yml`), which is where verification is meant to happen;
+building locally is for when you are changing something and want the loop shorter.
 
 Release signing reads `keystore.properties` in the project root:
 
@@ -186,21 +225,37 @@ UI → ViewModel → Repository → Room.
 |---|---|
 | `data/model` | Room entities and the domain model |
 | `data/db` | Database and DAO |
-| `data/export` | JSON/CSV/PDF import and export |
-| `location` | GPS and reverse geocoding via `LocationManager` |
+| `data/export` | JSON/CSV/PDF/GPX/KML export, CSV and JSON import, encrypted backup archives |
+| `location` | Fixes, GNSS status, sensors, averaging, the combined live reading, and the boundary-walk service |
+| `map` | Map sources, tile specifications and the style documents built from them |
+| `map/offline` | Downloaded areas, the download budget and its limits, PMTiles import |
 | `ui/*` | One package per screen, each with its ViewModel |
 | `util` | Distance, bearing, coordinate formatting, sharing |
 
 Deliberate choices worth knowing:
 
-- **osmdroid instead of the Google Maps SDK** — no API key to manage, no Play
-  Services dependency, and it opens the door to the offline-tiles feature. The
-  aerial and terrain styles are keyless tile servers for the same reason, fetched
-  two tiles at a time with no bulk download and no prefetching: they are somebody
-  else's bandwidth, given freely, and the app credits them on every map it draws
-  them on.
-- **`LocationManager` instead of the fused provider** — same reason: the app
-  works on devices without Google services.
+- **MapLibre Native instead of the Google Maps SDK** — no API key to manage, no
+  Play Services dependency, and vector tiles the app can style itself. Every style
+  is a JSON document generated or bundled locally, never fetched at startup, which
+  is what lets an imported archive and a downloaded area be drawn with exactly the
+  same ink as the online map. The OpenGL variant is used deliberately: the default
+  artifact is the Vulkan renderer, and Vulkan on Android 9 is patchy.
+- **No map plugins** — the annotation plugin still resolves an older SDK, so
+  boundaries are drawn with core `GeoJsonSource` + fill/line/symbol layers. One
+  source per map beats hundreds of marker objects on a walked track anyway.
+- **Keyless tile servers, and downloads only where the licence allows it** — each
+  source declares whether it may be stored offline, and the UI shows the reason
+  when it may not. They are somebody else's bandwidth, given freely, and the app
+  credits them on every map it draws them on.
+- **`LocationManager` instead of Play Services' fused provider** — same reason: the
+  app works on devices without Google services. On Android 12 and newer it uses the
+  platform's own `FUSED_PROVIDER`; below that it reads GPS, network and passive
+  providers together. Device sensors contribute a heading when the phone is too
+  slow for GPS bearing to mean anything, and nothing else — dead reckoning from an
+  IMU would be precision the hardware cannot deliver.
+- **One foreground service, for one feature** — recording a boundary walk keeps
+  running with the screen locked, so it has to be a service. Browsing the map does
+  not, and is not: it subscribes from the screen and stops with it.
 - **Hand-rolled DI (`AppContainer`)** — the graph is small enough that Hilt would
   cost more in build time and APK size than it returns.
 - **Storage Access Framework for every file** — the reason the app never asks for
@@ -216,10 +271,15 @@ Deliberate choices worth knowing:
 gradle testDebugUnitTest
 ```
 
-Covers the distance/bearing maths, the CSV reader and writer (quoting, CRLF,
-alternative column names, malformed rows), and import duplicate handling for all
-three strategies, including a full export-and-restore round trip against an
-in-memory database.
+Covers the distance/bearing and area maths, the CSV reader and writer (quoting,
+CRLF, alternative column names, malformed rows), import duplicate handling for all
+three strategies including a full export-and-restore round trip against an
+in-memory database, the boundary editing rules, the generated map style documents
+(tile template axis order, attribution, zoom limits, night styling, offline
+repointing), the download budget's tile counts and every one of its refusals, the
+PMTiles header reader against hand-built archives, offline metadata round trips
+across schema versions, the scale bar's rounding, and the walk session's vertex and
+distance rules.
 
 ---
 
@@ -227,8 +287,9 @@ in-memory database.
 
 Planned, and already accounted for in the data model:
 
-- GPX, KML and GeoJSON export
-- Downloadable offline map areas
-- GPS track recording
+- GeoJSON export as a file of its own — the geometry is already stored as GeoJSON
 - QR codes for sharing a location
 - Parcel numbering and grouping
+
+Shipped since this list was first written: GPX and KML export, downloadable offline
+map areas, and recording a boundary by walking it.
