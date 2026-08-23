@@ -79,11 +79,10 @@ class PhotoStamperTest {
         assertTrue(stamper.stamp(file, data))
 
         val exif = ExifInterface(file.absolutePath)
-        val latLong = FloatArray(2)
-        assertTrue(exif.getLatLong(latLong))
+        val latLong = requireNotNull(exif.latLong) { "no position was written" }
         // EXIF stores rationals, so the round trip is close rather than exact.
-        assertEquals(data.latitude, latLong[0].toDouble(), 1e-4)
-        assertEquals(data.longitude, latLong[1].toDouble(), 1e-4)
+        assertEquals(data.latitude, latLong[0], 1e-4)
+        assertEquals(data.longitude, latLong[1], 1e-4)
         assertEquals(768.0, exif.getAltitude(0.0), 0.5)
         assertNotNull(exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL))
         assertEquals("LandPoint", exif.getAttribute(ExifInterface.TAG_SOFTWARE))

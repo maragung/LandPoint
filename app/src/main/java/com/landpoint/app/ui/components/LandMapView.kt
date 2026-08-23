@@ -541,9 +541,11 @@ fun LandMap(
         // rather than handled in an activity callback because a map may be composed
         // on a screen whose activity knows nothing about it.
         val callbacks = object : ComponentCallbacks2 {
-            override fun onTrimMemory(level: Int) {
-                if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) mapView.onLowMemory()
-            }
+            // Every level, not a threshold: Android 15 deprecated the TRIM_MEMORY_*
+            // constants a threshold would have to name, and a map asked for memory has
+            // only one answer anyway. Dropping the cache costs a reread from the disk
+            // cache, never a download, so the cheap levels are worth honouring too.
+            override fun onTrimMemory(level: Int) = mapView.onLowMemory()
 
             @Deprecated("Kept because ComponentCallbacks still declares it.")
             override fun onLowMemory() = mapView.onLowMemory()
