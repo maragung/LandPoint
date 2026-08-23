@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Read from the build file rather than repeated in three filenames below,
       # so bumping the app version does not mean editing this workflow.
@@ -27,7 +27,7 @@ jobs:
           echo "Building LandPoint $version"
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -63,10 +63,31 @@ jobs:
       - name: Stage release artifacts
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p release
-          cp app/build/outputs/apk/release/app-release.apk "release/LandPoint-$APP_VERSION-release.apk"
+          # Five APKs: one per ABI plus a universal one. The per-ABI builds are what a
+          # phone should get — each carries a single copy of the MapLibre and SQLCipher
+          # native libraries instead of all four — and the universal APK is there for
+          # anyone who does not know which their device is, or who keeps one file for
+          # several phones.
+          for apk in app/build/outputs/apk/release/app-*-release.apk; do
+            abi=$(basename "$apk" | sed 's/^app-//; s/-release\.apk$//')
+            cp "$apk" "release/LandPoint-$APP_VERSION-$abi.apk"
+          done
+          # Five, or the split configuration changed and the release notes below are
+          # describing files that are not there.
+          count=$(ls -1 release/*.apk | wc -l)
+          test "$count" -eq 5 || { echo "expected 5 APKs, staged $count"; exit 1; }
           cp app/build/outputs/mapping/release/mapping.txt release/ 2>/dev/null || true
-          sha256sum release/* > release/SHA256SUMS
+          # Checksums with bare file names, so `sha256sum -c SHA256SUMS` works in
+          # whichever directory the user downloaded them into.
+          (
+            cd release
+            files=(*.apk)
+            if [ -f mapping.txt ]; then files+=(mapping.txt); fi
+            sha256sum "${files[@]}" > SHA256SUMS
+          )
+          ls -l release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -80,12 +101,26 @@ jobs:
         with:
           name: LandPoint ${{ github.ref_name }}
           body: |
-            LandPoint ${{ github.ref_name }} — release APK built automatically on GitHub.
+            LandPoint ${{ github.ref_name }} — release APKs built automatically on GitHub.
 
-            - APK: `LandPoint-${{ env.APP_VERSION }}-release.apk`
-            - Requires Android 9 (Pie) or newer; no Google Play Services needed.
+            **Which file to install**
+
+            | File | For |
+            |---|---|
+            | `LandPoint-${{ env.APP_VERSION }}-arm64-v8a.apk` | almost every phone from 2016 on — start here |
+            | `LandPoint-${{ env.APP_VERSION }}-armeabi-v7a.apk` | older 32-bit ARM phones |
+            | `LandPoint-${{ env.APP_VERSION }}-x86_64.apk` | emulators, Intel/AMD tablets |
+            | `LandPoint-${{ env.APP_VERSION }}-x86.apk` | older 32-bit x86 emulators |
+            | `LandPoint-${{ env.APP_VERSION }}-universal.apk` | works everywhere, larger — use if unsure |
+
+            The per-ABI files are smaller because the map and database engines ship as
+            native code: each one carries the libraries for a single processor instead
+            of all four.
+
+            - Requires Android 9 (Pie) or newer; no Google Play Services and no map API key needed.
             - Signed with the project release key; updating an existing install is safe.
+            - `SHA256SUMS` lists the checksum of every file above — verify with `sha256sum -c SHA256SUMS`.
           files: |
-            release/LandPoint-${{ env.APP_VERSION }}-release.apk
+            release/*.apk
             release/mapping.txt
             release/SHA256SUMS
