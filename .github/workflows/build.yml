@@ -133,6 +133,38 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Warnings live in the job log, which needs write access to download — the same
+      # reason a failure above is republished as an annotation. They are worth reading
+      # on a green build too, since a deprecation is how a library announces the next
+      # migration, so they go out the same way and stay readable to anyone.
+      - name: Report warnings as annotations
+        if: success()
+        shell: bash
+        run: |
+          # Same reasoning as the failure step: a grep that matches nothing is the
+          # expected case here, and must not fail the build.
+          set +e +o pipefail
+          warnings=$(grep -hE '^w: |warning: ' gradle-tests.log gradle-build.log gradle-release.log 2>/dev/null |
+            sed 's#file:///home/runner/work/LandPoint/LandPoint/##' |
+            sort -u |
+            head -n 40)
+          if [ -z "$warnings" ]; then
+            echo "No compiler warnings."
+            exit 0
+          fi
+          count=$(printf '%s\n' "$warnings" | wc -l | tr -d ' ')
+          {
+            echo "### Compiler warnings ($count)"
+            echo
+            echo '```'
+            printf '%s\n' "$warnings"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          escaped=${warnings//'%'/'%25'}
+          escaped=${escaped//$'\n'/'%0A'}
+          escaped=${escaped//$'\r'/''}
+          echo "::warning title=Compiler warnings ($count)::${escaped}"
+
       # Kept so a change can be installed on a phone straight from the run page,
       # without waiting for a release tag.
       - name: Upload debug APK
