@@ -505,7 +505,7 @@
     <string name="basemap_street">Peta jalan</string>
     <string name="basemap_street_summary">Jalan, nama tempat, dan bangunan. Perlu koneksi.</string>
     <string name="basemap_satellite">Satelit</string>
-    <string name="basemap_satellite_summary">Foto udara — sawah, atap, dan pohon apa adanya. Perlu koneksi.</string>
+    <string name="basemap_satellite_summary">Foto udara — sawah, atap, dan pohon apa adanya. Paling tajam di area kota; lebih dekat dari citra yang ada, gambar hanya diperbesar. Perlu koneksi.</string>
     <string name="basemap_terrain">Rupa bumi</string>
     <string name="basemap_terrain_summary">Garis kontur dan bayangan bukit, untuk tanah berlereng. Perlu koneksi.</string>
     <string name="basemap_imported">Peta offline</string>

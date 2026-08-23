@@ -20,8 +20,17 @@ import kotlinx.serialization.json.putJsonObject
  */
 private const val BACKDROP_SOURCE_ID = "ne2_shaded"
 
-/** The one source and layer id in a generated raster style. */
+/** The base source and layer id in a generated raster style. */
 private const val RASTER_ID = "basemap"
+
+/**
+ * The deeper tier of the same imagery, where a source has one.
+ *
+ * A second source rather than a deeper `maxzoom` on the first, because the two tiers
+ * have to be able to fail independently: this one is drawn above [RASTER_ID] and only
+ * covers it where the server really has the sharper picture.
+ */
+private const val DETAIL_ID = "basemap-detail"
 
 /**
  * Where MapLibre finds the letter shapes it draws text with.
@@ -119,13 +128,30 @@ class MapStyleFactory(private val assets: AssetManager) {
 
             is TileSpec.RasterXyz -> rasterStyle(
                 night = night,
-                source = buildJsonObject {
-                    put("type", "raster")
-                    putJsonArray("tiles") { tiles.templates.forEach { add(JsonPrimitive(it)) } }
-                    put("tileSize", tiles.tileSize)
-                    put("minzoom", provider.minZoom)
-                    put("maxzoom", provider.maxZoom)
-                    put("attribution", tiles.attribution)
+                tiers = buildList {
+                    add(
+                        RASTER_ID to rasterSource(
+                            templates = tiles.templates,
+                            tileSize = tiles.tileSize,
+                            minZoom = provider.minZoom,
+                            // The source's own last tile level, never the camera limit.
+                            // Declaring the camera limit here is what made MapLibre
+                            // request imagery that does not exist.
+                            maxZoom = tiles.sourceMaxZoom,
+                            attribution = tiles.attribution
+                        )
+                    )
+                    tiles.detail?.let { deep ->
+                        add(
+                            DETAIL_ID to rasterSource(
+                                templates = deep.templates,
+                                tileSize = tiles.tileSize,
+                                minZoom = deep.minZoom,
+                                maxZoom = deep.maxZoom,
+                                attribution = null
+                            )
+                        )
+                    }
                 }
             )
 
@@ -135,11 +161,13 @@ class MapStyleFactory(private val assets: AssetManager) {
                 } else {
                     rasterStyle(
                         night = night,
-                        source = buildJsonObject {
-                            put("type", "raster")
-                            put("url", pmtilesUrl(tiles.path))
-                            put("tileSize", 256)
-                        }
+                        tiers = listOf(
+                            RASTER_ID to buildJsonObject {
+                                put("type", "raster")
+                                put("url", pmtilesUrl(tiles.path))
+                                put("tileSize", 256)
+                            }
+                        )
                     )
                 }
         }
@@ -185,21 +213,26 @@ class MapStyleFactory(private val assets: AssetManager) {
     }
 
     /**
-     * A minimal, complete style around a single raster source.
+     * A minimal, complete style around one or more raster tiers of the same imagery.
      *
      * [GLYPHS] is declared but no `sprite` is: the app's corner numbers need letter
      * shapes, and nothing in a raster style needs an icon atlas.
      *
      * The background underneath is not decoration. Raster tiles arrive one at a time
      * over whatever connection there is, and the gaps between them read as holes in
-     * the map unless something neutral is already there.
+     * the map unless something neutral is already there. It is also what shows through
+     * where no tier has a tile at all.
+     *
+     * @param tiers source id to source, shallowest first. Layers are emitted in the
+     *   same order, so a later tier draws over an earlier one exactly where it has a
+     *   tile and leaves the earlier one visible — enlarged — where it does not.
      */
-    private fun rasterStyle(source: JsonObject, night: Boolean): String =
+    private fun rasterStyle(tiers: List<Pair<String, JsonObject>>, night: Boolean): String =
         buildJsonObject {
             put("version", 8)
             put("name", "LandPoint Raster")
             put("glyphs", GLYPHS)
-            putJsonObject("sources") { put(RASTER_ID, source) }
+            putJsonObject("sources") { tiers.forEach { (id, source) -> put(id, source) } }
             putJsonArray("layers") {
                 add(
                     buildJsonObject {
@@ -210,25 +243,54 @@ class MapStyleFactory(private val assets: AssetManager) {
                         }
                     }
                 )
-                add(
-                    buildJsonObject {
-                        put("id", RASTER_ID)
-                        put("type", "raster")
-                        put("source", RASTER_ID)
-                        putJsonObject("paint") {
-                            // Dimming, not inverting. An inverted photograph is not a
-                            // night map, it is an unreadable one, so the only thing
-                            // done here is to take the glare off — and only for
-                            // sources that opted into being recoloured at all.
-                            if (night) {
-                                put("raster-brightness-max", 0.72)
-                                put("raster-saturation", -0.25)
-                            }
-                        }
-                    }
-                )
+                tiers.forEach { (id, _) -> add(rasterLayer(id, night)) }
             }
         }.toString()
+
+    /**
+     * One raster source, in the shape MapLibre's style parser expects.
+     *
+     * @param maxZoom the deepest zoom these templates are published at. MapLibre stops
+     *   requesting past it and enlarges the deepest tile it got, which is the whole
+     *   mechanism behind a second tier.
+     * @param attribution null for a tier of a source the first tier already credits:
+     *   MapLibre collects attributions per source, and the same line twice reads as two
+     *   different providers.
+     */
+    private fun rasterSource(
+        templates: List<String>,
+        tileSize: Int,
+        minZoom: Double,
+        maxZoom: Double,
+        attribution: String?
+    ): JsonObject = buildJsonObject {
+        put("type", "raster")
+        putJsonArray("tiles") { templates.forEach { template -> add(JsonPrimitive(template)) } }
+        put("tileSize", tileSize)
+        put("minzoom", minZoom)
+        put("maxzoom", maxZoom)
+        attribution?.let { put("attribution", it) }
+    }
+
+    /**
+     * The layer that draws one tier. Built here rather than inline so every tier of a
+     * style is painted identically — two tiers of the same photograph that dim
+     * differently at night would show their seam.
+     */
+    private fun rasterLayer(id: String, night: Boolean): JsonObject = buildJsonObject {
+        put("id", id)
+        put("type", "raster")
+        put("source", id)
+        putJsonObject("paint") {
+            // Dimming, not inverting. An inverted photograph is not a night map, it is
+            // an unreadable one, so the only thing done here is to take the glare
+            // off — and only for sources that opted into being recoloured at all.
+            if (night) {
+                put("raster-brightness-max", 0.72)
+                put("raster-saturation", -0.25)
+            }
+        }
+    }
 
     private fun readAsset(path: String): String =
         assets.open(path).bufferedReader().use { it.readText() }

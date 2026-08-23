@@ -31,15 +31,19 @@ data class MapProvider(
      * The deepest zoom that has its own tiles, as opposed to the deepest the camera
      * may reach.
      *
-     * The two differ for a vector source and are the same for a raster one, which is
-     * the whole reason the street map stays crisp at zoom 19 while the satellite
-     * imagery goes soft. Read by [com.landpoint.app.map.offline.OfflineBudget] so a
-     * download is costed against tiles that exist.
+     * Never deeper than [maxZoom], and usually shallower — the street map stays crisp
+     * at the view limit because MapLibre redraws its geometry there, and the imagery
+     * goes soft there because all it can do is enlarge the deepest photograph. For
+     * imagery this is a ceiling rather than a promise: aerial coverage varies by place,
+     * so it is the deepest tile the source could serve *anywhere*, not the deepest it
+     * holds over a particular field. Read by
+     * [com.landpoint.app.map.offline.OfflineBudget] so a download is costed against
+     * tiles that can exist at all.
      */
     val tileMaxZoom: Double
         get() = when (val spec = tiles) {
             is TileSpec.VectorStyle -> spec.sourceMaxZoom
-            is TileSpec.RasterXyz -> maxZoom
+            is TileSpec.RasterXyz -> spec.detail?.maxZoom ?: spec.sourceMaxZoom
             is TileSpec.LocalArchive -> maxZoom
         }
 }
@@ -55,14 +59,18 @@ data class MapProvider(
 object MapProviders {
 
     /**
-     * The deepest zoom any style here is asked for.
+     * The deepest zoom the camera may reach, on every style whose source does not
+     * insist otherwise.
      *
-     * The vector street tiles stop at level 14 and MapLibre overzooms past that,
-     * scaling the geometry it already has — which is why a vector map stays sharp
-     * at 19 while a raster one turns to porridge. The number below is therefore a
-     * *view* limit, not a tile limit.
+     * A *view* limit, not a tile limit, and deliberately deeper than any source's
+     * deepest tile. The vector street tiles stop at level 14 and MapLibre redraws
+     * their geometry at whatever zoom is asked for, so a street map is as sharp here
+     * as at 14. Imagery is not: past its last photograph all that can be done is to
+     * enlarge it, which is still the right answer for someone standing on a corner
+     * they are trying to place — a blurred picture of the correct ground beats a
+     * refusal to go closer.
      */
-    const val DEEPEST_ZOOM = 19.0
+    const val DEEPEST_ZOOM = 20.0
 
     /**
      * The bundled street style, in the OpenMapTiles schema, served by OpenFreeMap.
@@ -96,30 +104,60 @@ object MapProviders {
     )
 
     /**
+     * Esri's tile endpoint, with the one parameter that makes a missing tile behave
+     * like a missing tile.
+     *
+     * `blankTile=false` turns a 2.5 kB placeholder image reading "Map data not yet
+     * available" into an honest 404. Without it the server answers 200 with that
+     * picture for ground it has no photograph of, and nothing downstream — not this
+     * app, not MapLibre — can tell it from imagery, so it gets drawn over the land at
+     * every zoom past the last real tile.
+     *
+     * Note the `{z}/{y}/{x}`. ArcGIS servers are row-major, unlike the z/x/y of every
+     * other source here, and getting it the usual way round returns imagery of
+     * somewhere else entirely with no error to say so.
+     */
+    private const val ESRI_IMAGERY =
+        "https://server.arcgisonline.com/ArcGIS/rest/services/" +
+            "World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false"
+
+    /**
      * Esri's World Imagery — the aerial photography, and the reason this app can
      * show the actual ground without an API key.
      *
-     * Note the template's `{z}/{y}/{x}`. ArcGIS servers are row-major, unlike the
-     * z/x/y of every other source here, and getting it the usual way round returns
-     * imagery of somewhere else entirely with no error to say so.
+     * Two tiers of the one service, because its coverage is not uniform and nothing
+     * readable says where it thins out. Sampled across Indonesia: zoom 18 was there at
+     * every point tried, including rural Kalimantan and Papua; zoom 19 at most of them
+     * but not all; zoom 20 at none. So 18 is the tier that can be relied on, 19 is
+     * asked for as well and simply fails where it is absent, and the camera is allowed
+     * past both — at [DEEPEST_ZOOM] what the user sees is the deepest photograph that
+     * exists, enlarged.
      */
     private val satellite = MapProvider(
         mode = BasemapMode.SATELLITE,
         tiles = TileSpec.RasterXyz(
-            templates = listOf(
-                "https://server.arcgisonline.com/ArcGIS/rest/services/" +
-                    "World_Imagery/MapServer/tile/{z}/{y}/{x}"
-            ),
+            templates = listOf(ESRI_IMAGERY),
             tileSize = 256,
-            attribution = "Imagery © Esri, Maxar, Earthstar Geographics"
+            attribution = "Imagery © Esri, Maxar, Earthstar Geographics",
+            sourceMaxZoom = 18.0,
+            detail = TileSpec.RasterXyz.Detail(
+                templates = listOf(ESRI_IMAGERY),
+                minZoom = 19.0,
+                maxZoom = 19.0
+            )
         ),
         minZoom = 0.0,
-        maxZoom = 19.0
+        maxZoom = DEEPEST_ZOOM
     )
 
     /**
      * OpenTopoMap: OpenStreetMap data plus SRTM relief, published CC-BY-SA — so the
      * credit on screen is a licence condition rather than a courtesy.
+     *
+     * The one style whose camera stops where its tiles do. Enlarging a contour line
+     * adds nothing: the relief is drawn from 30 m elevation samples, so a closer view
+     * would be an invented shape rather than a coarse picture of a real one. Imagery
+     * is the opposite case, and is treated the opposite way.
      */
     private val terrain = MapProvider(
         mode = BasemapMode.TERRAIN,
@@ -130,7 +168,8 @@ object MapProviders {
                 "https://c.tile.opentopomap.org/{z}/{x}/{y}.png"
             ),
             tileSize = 256,
-            attribution = "© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)"
+            attribution = "© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)",
+            sourceMaxZoom = 17.0
         ),
         minZoom = 0.0,
         maxZoom = 17.0

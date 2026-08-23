@@ -34,11 +34,6 @@ import com.landpoint.app.R
  *   magenta, and inverting hillshade turns every valley into a ridge.
  * @param needsNetwork false only for [IMPORTED]; the map stops reaching for a
  *   radio when there is nothing to fetch on it.
- * @param maxZoom the deepest zoom that still has tiles behind it, or null to
- *   leave the cap to the tile source. Without it a user zooms past the last tile
- *   into a blank grey field and assumes the app broke. Note that a *vector* source
- *   keeps drawing past its own last tile level by overzooming the one below, so
- *   this is the deepest zoom worth requesting, not the deepest worth allowing.
  * @param allowsOfflineDownload whether this source's terms permit storing its
  *   tiles for later. Not a technical limit — every one of these could be
  *   downloaded — but a licence one, and the app enforces it rather than leaving it
@@ -52,7 +47,6 @@ enum class BasemapMode(
     @StringRes val attributionRes: Int,
     val tintForNight: Boolean,
     val needsNetwork: Boolean,
-    val maxZoom: Double?,
     val allowsOfflineDownload: Boolean,
     @StringRes val offlineRefusalRes: Int? = null
 ) {
@@ -63,7 +57,6 @@ enum class BasemapMode(
         attributionRes = R.string.map_attribution_osm,
         tintForNight = true,
         needsNetwork = true,
-        maxZoom = 19.0,
         // OpenFreeMap: no key, no quota, commercial use allowed, and it publishes
         // the whole planet as a downloadable archive — so a bounded area saved for
         // a field with no signal is squarely within what it is offered for.
@@ -77,7 +70,6 @@ enum class BasemapMode(
         attributionRes = R.string.map_attribution_esri,
         tintForNight = false,
         needsNetwork = true,
-        maxZoom = 19.0,
         // Esri's terms do not permit caching the imagery. A user who needs aerial
         // photographs offline has to bring an archive they are licensed to hold,
         // which is what IMPORTED is for.
@@ -91,9 +83,6 @@ enum class BasemapMode(
         attributionRes = R.string.map_attribution_topo,
         tintForNight = false,
         needsNetwork = true,
-        // OpenTopoMap's last zoom level. Two steps shallower than the street
-        // tiles, which is what the cap exists to stop a user walking off.
-        maxZoom = 17.0,
         // OpenTopoMap is volunteer-run and its tile usage policy forbids bulk
         // downloading in as many words.
         allowsOfflineDownload = false,
@@ -106,9 +95,6 @@ enum class BasemapMode(
         attributionRes = R.string.map_attribution_osm,
         tintForNight = true,
         needsNetwork = false,
-        // No cap: a vector map is rendered on the device, so there is no such
-        // thing as a zoom with no tile behind it.
-        maxZoom = null,
         // Already on the device. Nothing to download, and nothing to refuse.
         allowsOfflineDownload = false,
         offlineRefusalRes = R.string.offline_refused_imported

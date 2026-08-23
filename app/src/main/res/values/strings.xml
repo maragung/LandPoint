@@ -526,7 +526,7 @@
     <string name="basemap_street">Street map</string>
     <string name="basemap_street_summary">Roads, place names and buildings. Needs a connection.</string>
     <string name="basemap_satellite">Satellite</string>
-    <string name="basemap_satellite_summary">Aerial photographs — fields, roofs and trees as they are. Needs a connection.</string>
+    <string name="basemap_satellite_summary">Aerial photographs — fields, roofs and trees as they are. Sharpest over towns; closer than the imagery goes it is simply enlarged. Needs a connection.</string>
     <string name="basemap_terrain">Terrain</string>
     <string name="basemap_terrain_summary">Contour lines and hill shading, for sloping ground. Needs a connection.</string>
     <string name="basemap_imported">Offline map</string>

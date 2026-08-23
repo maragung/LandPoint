@@ -54,7 +54,9 @@ everything back on screen, and change the map style. Tap a marker or a plot to
 open the record; open a record's boundary full screen to see its numbered
 corners, area and perimeter. Rotating the phone keeps the camera where you left
 it. Tiles you have already viewed stay cached, so a map you loaded at home still
-works in a field with no signal.
+works in a field with no signal. Every style zooms in far enough to place a corner
+by eye; where aerial coverage runs out the imagery is simply enlarged, because a
+coarse picture of the right ground is worth more than a refusal to go closer.
 
 **Where you are, in full** — a panel on the map reads out latitude, longitude,
 accuracy in metres, altitude, speed, bearing, the time of the fix, which receiver
@@ -70,7 +72,7 @@ at full rate in a pocket.
 | Style | What it shows | Source |
 | --- | --- | --- |
 | Street | Roads, names, buildings, drawn from vector tiles so the labels stay sharp at any zoom. The default, and the lightest on data. | OpenFreeMap Liberty, from OpenStreetMap data |
-| Satellite | The ground itself — roofs, trees, field edges — so a corner can be checked against something you can see. | Esri World Imagery (Esri, Maxar, Earthstar Geographics) |
+| Satellite | The ground itself — roofs, trees, field edges — so a corner can be checked against something you can see. Full detail to about a 20 m scale bar over towns and 50 m elsewhere; closer than that the last photograph is enlarged rather than replaced by a placeholder. | Esri World Imagery (Esri, Maxar, Earthstar Geographics) |
 | Terrain | Contours and hill shading, for sloping or terraced land. | OpenTopoMap (CC-BY-SA) |
 | Imported | A map file you copied onto the phone yourself. Needs no network at all. | your `.pmtiles` archive |
 

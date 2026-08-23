@@ -72,17 +72,91 @@ class MapStyleFactoryTest {
         // as holes in the map.
         val layers = style.layers().map { it.jsonObject }
         assertEquals("background", layers.first().text("type"))
-        assertEquals("raster", layers.last().text("type"))
-        assertEquals(layers.last().text("source"), style.sources().keys.single())
+
+        // Then one raster layer per source, in the source order, and nothing else: a
+        // layer naming a source the document does not declare draws nothing at all.
+        val drawn = layers.drop(1)
+        assertTrue(drawn.all { it.text("type") == "raster" })
+        assertEquals(style.sources().keys.toList(), drawn.map { it.text("source") })
+    }
+
+    @Test
+    fun `imagery is drawn as two tiers, so a missing deep tile uncovers a shallower one`() {
+        // Esri has zoom 18 everywhere sampled across Indonesia, 19 in most places but
+        // not all, and nothing readable says which is which for a given field. Both
+        // tiers are therefore requested: where the deep tile exists it covers the base,
+        // and where it does not the request 404s, draws nothing, and the base shows
+        // through enlarged.
+        val satellite = provider(BasemapMode.SATELLITE)
+        val spec = satellite.tiles as TileSpec.RasterXyz
+        val detail = requireNotNull(spec.detail) { "the deep tier is the fix" }
+        val style = document(BasemapMode.SATELLITE)
+        val sources = style.sources()
+
+        assertEquals(listOf("basemap", "basemap-detail"), sources.keys.toList())
+
+        val base = sources.getValue("basemap").jsonObject
+        assertEquals(spec.sourceMaxZoom.toString(), base.text("maxzoom"))
+        assertEquals("18.0", base.text("maxzoom"))
+        assertTrue(base.text("attribution")!!.contains("Esri"))
+
+        val deep = sources.getValue("basemap-detail").jsonObject
+        assertEquals(detail.minZoom.toString(), deep.text("minzoom"))
+        assertEquals(detail.maxZoom.toString(), deep.text("maxzoom"))
+        // One credit for one provider: MapLibre gathers attributions per source, and
+        // the same line twice reads as two different companies.
+        assertNull(deep["attribution"])
+
+        // Order is the whole mechanism — the deep tier has to be drawn over the base.
+        val drawn = style.layers().map { it.jsonObject }.drop(1)
+        assertEquals(listOf("basemap", "basemap-detail"), drawn.map { it.text("source") })
+    }
+
+    @Test
+    fun `a missing imagery tile has to fail rather than arrive as a picture saying so`() {
+        // Without blankTile=false the ArcGIS endpoint answers 200 and a 2.5 kB JPEG
+        // reading "Map data not yet available" for ground it has no photograph of —
+        // byte-identical wherever it happens, and indistinguishable from imagery to
+        // MapLibre, which duly drew it over a user's land. This one parameter is the
+        // only thing standing between that and a 404, so it is asserted rather than
+        // trusted to survive the next edit of a URL.
+        val templates = document(BasemapMode.SATELLITE).sources().values
+            .flatMap { it.jsonObject.getValue("tiles").jsonArray }
+            .map { it.jsonPrimitive.content }
+
+        assertEquals(2, templates.size)
+        assertTrue(templates.all { it.contains("blankTile=false") })
+    }
+
+    @Test
+    fun `the camera may go deeper than the imagery that draws it`() {
+        // The two numbers used to be one, and merging them is what asked Esri for
+        // tiles it does not have. They are allowed to differ in exactly one direction.
+        val satellite = provider(BasemapMode.SATELLITE)
+        val spec = satellite.tiles as TileSpec.RasterXyz
+
+        assertTrue(satellite.maxZoom > spec.sourceMaxZoom)
+        assertEquals(MapProviders.DEEPEST_ZOOM, satellite.maxZoom, 0.0)
+
+        MapProviders.builtIn.forEach {
+            assertTrue("$it may not claim tiles past its own camera", it.tileMaxZoom <= it.maxZoom)
+        }
     }
 
     @Test
     fun `raster sources carry their attribution and their zoom limits`() {
         val terrain = provider(BasemapMode.TERRAIN)
+        val spec = terrain.tiles as TileSpec.RasterXyz
+        // One tier and no deep one: enlarging a contour drawn from 30 m elevation
+        // samples would invent a shape rather than blur a real one.
         val source = document(BasemapMode.TERRAIN).sources().values.single().jsonObject
+        assertNull(spec.detail)
 
         assertEquals("raster", source.text("type"))
         assertEquals(terrain.minZoom.toString(), source.text("minzoom"))
+        // The source's last published zoom, which is not in general the camera's
+        // limit — here they happen to agree, and for imagery they must not.
+        assertEquals(spec.sourceMaxZoom.toString(), source.text("maxzoom"))
         assertEquals(terrain.maxZoom.toString(), source.text("maxzoom"))
         // A licence condition, not a courtesy: OpenTopoMap is CC-BY-SA.
         assertTrue(source.text("attribution")!!.contains("OpenTopoMap"))
@@ -91,15 +165,15 @@ class MapStyleFactoryTest {
 
     @Test
     fun `the imagery template is row-major, as ArcGIS serves it`() {
-        val templates = document(BasemapMode.SATELLITE)
-            .sources().values.single().jsonObject
-            .getValue("tiles").jsonArray
+        val templates = document(BasemapMode.SATELLITE).sources().values
+            .flatMap { it.jsonObject.getValue("tiles").jsonArray }
             .map { it.jsonPrimitive.content }
 
-        assertEquals(1, templates.size)
         // z/y/x, not the z/x/y of every other source here. Getting it the usual way
         // round returns imagery of somewhere else entirely, with no error to say so.
-        assertTrue(templates.single().endsWith("/tile/{z}/{y}/{x}"))
+        assertTrue(templates.isNotEmpty())
+        assertTrue(templates.all { it.contains("/tile/{z}/{y}/{x}") })
+        assertTrue(templates.none { it.contains("/tile/{z}/{x}/{y}") })
     }
 
     @Test
@@ -119,11 +193,15 @@ class MapStyleFactoryTest {
         // is not a night map, and the same holds for relief shading.
         assertFalse(BasemapMode.SATELLITE.tintForNight)
 
-        val paint = document(BasemapMode.SATELLITE, dark = true)
-            .layers().last().jsonObject
-            .getValue("paint").jsonObject
+        // Every tier, not just the top one: two tiers of the same photograph dimmed
+        // differently would show their seam where the deeper one stops.
+        val paints = document(BasemapMode.SATELLITE, dark = true)
+            .layers().map { it.jsonObject }
+            .filter { it.text("type") == "raster" }
+            .map { it.getValue("paint").jsonObject }
 
-        assertTrue(paint.isEmpty())
+        assertEquals(2, paints.size)
+        assertTrue(paints.all { it.isEmpty() })
     }
 
     @Test
@@ -136,7 +214,8 @@ class MapStyleFactoryTest {
             tiles = TileSpec.RasterXyz(
                 templates = listOf("https://example.invalid/{z}/{x}/{y}.png"),
                 tileSize = 256,
-                attribution = "test"
+                attribution = "test",
+                sourceMaxZoom = 18.0
             )
         )
         assertTrue(tinted.mode.tintForNight)
@@ -219,8 +298,8 @@ class MapStyleFactoryTest {
 
         assertEquals(terrain.minZoom, style.minZoom, 0.0)
         assertEquals(terrain.maxZoom, style.maxZoom, 0.0)
-        // 17, not the 19 the street tiles reach: past it OpenTopoMap has nothing, and
-        // a camera left deeper shows the blank grey of tiles that were never made.
+        // 17, not the 20 every other style reaches: past it OpenTopoMap has nothing,
+        // and unlike a photograph a stretched contour line is a shape nobody surveyed.
         assertEquals(17.0, style.maxZoom, 0.0)
     }
 

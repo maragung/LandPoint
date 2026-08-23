@@ -58,7 +58,12 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.geojson.Feature
 
-/** Close enough to read a fence line, and the deepest any bundled source draws. */
+/**
+ * Where the camera lands when it frames a single point: close enough to read a fence
+ * line, and over a town the deepest zoom the aerial imagery still has a real tile for.
+ * Deliberately short of [com.landpoint.app.map.MapProviders.DEEPEST_ZOOM] — a user can
+ * pinch closer than the photographs go, but nothing should put them there unasked.
+ */
 const val PARCEL_ZOOM = 19.0
 
 /** One press of a zoom button. */
@@ -565,9 +570,9 @@ fun LandMap(
     LaunchedEffect(maplibre, style?.key) {
         val map = maplibre ?: return@LaunchedEffect
         val current = style ?: return@LaunchedEffect
-        // Set before the style, so a switch from a source that draws to zoom 19 to
-        // one that stops at 17 pulls the camera back rather than leaving it staring
-        // at a level with no tiles behind it.
+        // Set before the style, so a switch from a source the camera may follow to
+        // zoom 20 to one that stops at 17 pulls the camera back rather than leaving
+        // it staring past the last level that source will draw at all.
         map.setMinZoomPreference(current.minZoom)
         map.setMaxZoomPreference(current.maxZoom)
         map.setStyle(Style.Builder().fromJson(current.json)) { loaded -> overlay.bind(loaded) }

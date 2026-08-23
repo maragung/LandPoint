@@ -92,17 +92,6 @@ class BasemapModeTest {
     }
 
     @Test
-    fun `every style fetched from a server says how deep its tiles go`() {
-        // Past the last published zoom a map goes blank grey, which looks like a
-        // fault. Only the on-device renderer has no such limit.
-        BasemapMode.entries.filter { it.needsNetwork }.forEach {
-            assertNotNull("$it must cap its zoom", it.maxZoom)
-        }
-        assertNull(BasemapMode.IMPORTED.maxZoom)
-        assertTrue(BasemapMode.TERRAIN.maxZoom!! < BasemapMode.SATELLITE.maxZoom!!)
-    }
-
-    @Test
     fun `only the street tiles may be saved for offline use`() {
         // A licence decision, not a technical one: all three online sources could
         // be downloaded, and only one of them permits it. Spelled out per mode so

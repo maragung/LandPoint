@@ -60,12 +60,42 @@ sealed interface TileSpec {
      *   `{x}` and `{y}`, and spreads requests across however many are given.
      * @param attribution shown by MapLibre's own attribution plumbing as well as
      *   by the app's; a licence condition either way.
+     * @param sourceMaxZoom the deepest zoom [templates] are published at everywhere
+     *   this app is used — not the deepest the camera may reach. The two were one
+     *   number until a user zoomed past the last photograph and was shown a picture
+     *   of the words "Map data not yet available" instead of the ground; see [Detail].
+     * @param detail a deeper tier of the same imagery, or null when there is none.
      */
     data class RasterXyz(
         val templates: List<String>,
         val tileSize: Int,
-        val attribution: String
-    ) : TileSpec
+        val attribution: String,
+        val sourceMaxZoom: Double,
+        val detail: Detail? = null
+    ) : TileSpec {
+
+        /**
+         * A sharper tier of the same imagery, drawn over [templates] and only where
+         * the server actually has it.
+         *
+         * Aerial coverage is not uniform, and nothing the app can read says where it
+         * ends: Esri has zoom 19 over much of Indonesia and stops at 18 over some of
+         * it. So both tiers are asked for. Where the deep tile exists it covers the shallow
+         * one; where it does not the request fails, nothing is drawn from this tier,
+         * and the shallower one shows through enlarged.
+         *
+         * All of which depends on a missing tile actually failing. Left alone the
+         * ArcGIS endpoint answers 200 with a placeholder image reading "Map data not
+         * yet available" — indistinguishable from imagery to every layer of software
+         * below this one, which is why [MapProviders] puts `blankTile=false` on every
+         * template it hands over.
+         */
+        data class Detail(
+            val templates: List<String>,
+            val minZoom: Double,
+            val maxZoom: Double
+        )
+    }
 
     /**
      * A PMTiles archive sitting on this device.
