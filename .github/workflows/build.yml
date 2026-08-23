@@ -39,10 +39,55 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew testDebugUnitTest 2>&1 | tee gradle-tests.log
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug 2>&1 | tee gradle-build.log
+
+      # Downloading a job log needs write access to the repository, so a failure
+      # here would otherwise be readable only by someone with admin rights. A
+      # workflow command turns the compiler's own output into a check annotation,
+      # which is public on the run page and in the API — the same place the failure
+      # is already reported.
+      - name: Report failures as annotations
+        if: failure()
+        shell: bash
+        run: |
+          summarise() {
+            # Kotlin ("e: file:///...") and javac ("...error:") diagnostics, plus
+            # the JUnit lines Gradle prints for a failing test, and its own "What
+            # went wrong" block for everything else.
+            grep -hE '^e: |error: |^w: .*\berror\b|FAILED$|^\* What went wrong|^> ' "$@" 2>/dev/null |
+              grep -v 'Execution failed for task' |
+              head -n 60
+          }
+          details=$(summarise gradle-tests.log gradle-build.log)
+          if [ -z "$details" ]; then
+            details=$(tail -n 40 gradle-tests.log gradle-build.log 2>/dev/null)
+          fi
+          # Paths are absolute on the runner and add nothing here; the repository
+          # path is what a reader needs.
+          details=${details//file:\/\/\/home\/runner\/work\/LandPoint\/LandPoint\//}
+          # Newlines and colons have to be escaped for a workflow command, and one
+          # multi-line annotation is used rather than many because only the first
+          # ten per step are kept.
+          details=${details//'%'/'%25'}
+          details=${details//$'\n'/'%0A'}
+          details=${details//$'\r'/''}
+          echo "::error title=Build failed::${details}"
+          {
+            echo '### Build failure'
+            echo
+            echo '```'
+            summarise gradle-tests.log gradle-build.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Kept so a change can be installed on a phone straight from the run page,
       # without waiting for a release tag.
