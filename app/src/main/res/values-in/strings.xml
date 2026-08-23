@@ -300,6 +300,7 @@
     <!-- Dibacakan sebagai pengganti peta: isi peta digambar ke satu kanvas,
          jadi pembaca layar tidak menemukan apa pun untuk dibacakan. -->
     <string name="map_a11y_overview">Peta. %1$s tersimpan, %2$d di antaranya punya batas tergambar. Daftar tanah menyebutkan catatan yang sama dalam kata.</string>
+    <string name="map_engine_unavailable">Peta tidak dapat digambar di HP ini karena mesin peta gagal dijalankan. Fitur LandPoint lainnya tetap berfungsi.</string>
     <string name="map_a11y_empty">Peta. Belum ada tanah yang tersimpan.</string>
     <string name="shape_a11y_map">Peta batas bidang: %1$s, luas %2$s. Rincian catatan mencantumkan koordinat setiap sudut.</string>
     <string name="shape_a11y_map_no_area">Peta batas bidang: %1$s, belum cukup untuk menghitung luas.</string>

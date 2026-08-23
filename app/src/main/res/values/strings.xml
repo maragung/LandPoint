@@ -313,6 +313,7 @@
          an unlabelled box and says nothing at all. These say what is on the map
          instead, and where the same facts can be read without one. -->
     <string name="map_a11y_overview">Map. %1$s saved, %2$d of them with a boundary drawn. The list of lands says the same records in words.</string>
+    <string name="map_engine_unavailable">The map cannot be drawn on this phone: its rendering engine did not start. Everything else in LandPoint works as usual.</string>
     <string name="map_a11y_empty">Map. No land saved yet.</string>
     <string name="shape_a11y_map">Map of the boundary: %1$s, area %2$s. The record lists every corner as coordinates.</string>
     <string name="shape_a11y_map_no_area">Map of the boundary: %1$s, too few for an area.</string>

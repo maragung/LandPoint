@@ -26,18 +26,47 @@ object MapLibreInit {
 
     private var started = false
 
+    @Volatile
+    private var available = false
+
+    /**
+     * Whether there is a renderer to draw a map with.
+     *
+     * False before [start], and false afterwards on any machine where the native
+     * library did not load — a JVM test host, by definition, and in principle a
+     * device whose ABI the packaged libraries do not cover. Read by every entry
+     * point that would otherwise construct a native object: see
+     * `LandMap`, which draws a message instead of a map, and `OfflineRegionStore`,
+     * which reports no saved areas rather than throwing.
+     */
+    val isAvailable: Boolean
+        get() = available
+
     /**
      * Idempotent, because the engine is initialised from `Application.onCreate` and
      * would also be reached from an instrumentation test that builds its own
      * container. A second `getInstance` is harmless but the callback registration
      * below is not.
+     *
+     * A failure to start is reported, not thrown. Loading the native library is the
+     * one part of this that can fail outright, and it fails with an
+     * `UnsatisfiedLinkError` — which, being an `Error`, would pass through every
+     * `catch (e: Exception)` in the app and kill the process on the launcher icon.
+     * The rest of LandPoint — records, photos, exports, backups — does not need a
+     * renderer, so a device without one gets an app that works and a map screen that
+     * says so.
+     *
+     * @return true when the engine is usable.
      */
-    fun start(context: Context) {
-        if (started) return
+    fun start(context: Context): Boolean {
+        if (started) return available
         started = true
 
-        MapLibre.getInstance(context)
-        watchConnectivity(context)
+        available = runCatching { MapLibre.getInstance(context) }
+            .onFailure { Log.w(TAG, "map engine did not start; maps are unavailable", it) }
+            .isSuccess
+        if (available) watchConnectivity(context)
+        return available
     }
 
     /**

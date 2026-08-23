@@ -3,6 +3,7 @@ package com.landpoint.app.map.offline
 import android.content.Context
 import android.util.Log
 import com.landpoint.app.map.GeoBounds
+import com.landpoint.app.map.MapLibreInit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -46,10 +47,6 @@ class OfflineRegionStore(private val context: Context) {
      */
     private val known = mutableMapOf<Long, OfflineRegion>()
 
-    private suspend fun manager(): OfflineManager = withContext(Dispatchers.Main) {
-        OfflineManager.getInstance(context)
-    }
-
     /**
      * Every saved area, with what MapLibre currently knows about each.
      *
@@ -59,8 +56,9 @@ class OfflineRegionStore(private val context: Context) {
      * cannot identify is delete it.
      */
     suspend fun list(): List<SavedRegion> = withContext(Dispatchers.Main) {
+        val manager = manageOnMain() ?: return@withContext emptyList()
         val regions = suspendCancellableCoroutine { continuation ->
-            manageOnMain().listOfflineRegions(
+            manager.listOfflineRegions(
                 object : OfflineManager.ListOfflineRegionsCallback {
                     override fun onList(offlineRegions: Array<OfflineRegion>?) {
                         continuation.resume(offlineRegions?.toList().orEmpty())
@@ -108,8 +106,9 @@ class OfflineRegionStore(private val context: Context) {
         )
         // Typed explicitly: the failure path resumes with null, and left to infer
         // from that alone the coroutine's type collapses to Nothing?.
+        val manager = manageOnMain() ?: return@withContext null
         val region = suspendCancellableCoroutine<OfflineRegion?> { continuation ->
-            manageOnMain().createOfflineRegion(
+            manager.createOfflineRegion(
                 definition,
                 meta.encode(),
                 object : OfflineManager.CreateOfflineRegionCallback {
@@ -281,7 +280,8 @@ class OfflineRegionStore(private val context: Context) {
      * underestimate becomes a full phone rather than a stopped download.
      */
     suspend fun setTileCeiling(tiles: Long) = withContext(Dispatchers.Main) {
-        manageOnMain().setOfflineMapboxTileCountLimit(tiles)
+        manageOnMain()?.setOfflineMapboxTileCountLimit(tiles)
+        Unit
     }
 
     /**
@@ -294,8 +294,9 @@ class OfflineRegionStore(private val context: Context) {
      * keep.
      */
     suspend fun clearBrowsingCache() = withContext(Dispatchers.Main) {
+        val manager = manageOnMain() ?: return@withContext
         suspendCancellableCoroutine { continuation ->
-            manageOnMain().clearAmbientCache(object : OfflineManager.FileSourceCallback {
+            manager.clearAmbientCache(object : OfflineManager.FileSourceCallback {
                 override fun onSuccess() = continuation.resume(Unit)
 
                 override fun onError(message: String) {
@@ -315,8 +316,9 @@ class OfflineRegionStore(private val context: Context) {
      * delete rather than on any path the user is waiting on.
      */
     suspend fun compact() = withContext(Dispatchers.Main) {
+        val manager = manageOnMain() ?: return@withContext
         suspendCancellableCoroutine { continuation ->
-            manageOnMain().packDatabase(object : OfflineManager.FileSourceCallback {
+            manager.packDatabase(object : OfflineManager.FileSourceCallback {
                 override fun onSuccess() = continuation.resume(Unit)
 
                 override fun onError(message: String) {
@@ -328,10 +330,26 @@ class OfflineRegionStore(private val context: Context) {
     }
 
     /**
+     * The offline manager, or null on a device whose renderer never came up.
+     *
      * Already on the main thread by construction — every caller above is inside a
-     * `withContext(Dispatchers.Main)`. Exists so that fact is stated once.
+     * `withContext(Dispatchers.Main)`, and this exists so that fact is stated once.
+     *
+     * Null when [MapLibreInit.isAvailable] is false, which happens only if the
+     * native library failed to load. In that state every call into MapLibre throws
+     * an `UnsatisfiedLinkError` — an `Error`, so it goes straight past the
+     * ViewModels' exception handling and takes the process with it. A null manager
+     * instead leaves the offline screen empty and inert, which is the truth about
+     * that device: no renderer, so no saved maps either.
      */
-    private fun manageOnMain(): OfflineManager = OfflineManager.getInstance(context)
+    private fun manageOnMain(): OfflineManager? =
+        if (MapLibreInit.isAvailable) {
+            runCatching { OfflineManager.getInstance(context) }
+                .onFailure { Log.w(TAG, "no offline manager", it) }
+                .getOrNull()
+        } else {
+            null
+        }
 }
 
 /** One saved area, as the UI needs it. */

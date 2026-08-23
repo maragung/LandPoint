@@ -8,6 +8,11 @@ import android.graphics.RectF
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -19,16 +24,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.landpoint.app.R
 import com.landpoint.app.map.GeoBounds
+import com.landpoint.app.map.MapLibreInit
 import com.landpoint.app.map.MapStyle
 import com.landpoint.app.util.GeoPoint
 import com.landpoint.app.util.GeoUtils
@@ -66,6 +78,9 @@ private val FIT_PADDING = 48.dp
  * shape alone would make a correctly aimed tap miss.
  */
 private val TAP_RADIUS = 20.dp
+
+/** Breathing room around the stand-in message where a map cannot be drawn. */
+private val MESSAGE_PADDING = 24.dp
 
 /**
  * The horizontal span, in pixels, used to measure the map's scale.
@@ -438,6 +453,15 @@ fun LandMap(
     onTap: ((MapTap) -> Unit)? = null,
     onMoveCorner: ((id: String, latitude: Double, longitude: Double) -> Unit)? = null
 ) {
+    // Checked before anything else here, because every object remembered below is a
+    // native one and the first of them would throw on construction. The answer is
+    // fixed for the life of the process — it is decided in `Application.onCreate` —
+    // so this branch cannot change between recompositions.
+    if (!MapLibreInit.isAvailable) {
+        MapUnavailable(modifier, contentDescription)
+        return
+    }
+
     val context = LocalContext.current
     val density = LocalDensity.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -621,6 +645,31 @@ fun LandMap(
             overlay.set(shapes, pins, corners, fix, accentColour, selectedColour)
         }
     )
+}
+
+/**
+ * What stands in for the map when there is no renderer to draw one.
+ *
+ * Takes the same [Modifier] as the map, so a screen laid out around a map keeps its
+ * shape, and carries the same content description, so a screen reader is told what
+ * this area is for either way.
+ */
+@Composable
+private fun MapUnavailable(modifier: Modifier, contentDescription: String?) {
+    Box(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .semantics { contentDescription?.let { this.contentDescription = it } },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = stringResource(R.string.map_engine_unavailable),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(MESSAGE_PADDING)
+        )
+    }
 }
 
 /**
