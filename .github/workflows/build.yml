@@ -50,6 +50,23 @@ jobs:
           set -o pipefail
           ./gradlew assembleDebug 2>&1 | tee gradle-build.log
 
+      # R8 runs for the release build only, and release.yml runs it for the first
+      # time on a v* tag — by which point the tag, and its release page, are public.
+      # Building it here means a shrinking or ProGuard-rule mistake fails on a branch
+      # instead, and the count doubles as proof that the ABI split still produces the
+      # five APKs release.yml goes on to publish. Unsigned on purpose: the signing key
+      # is a secret this workflow has no reason to hold.
+      - name: Build release APKs
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew assembleRelease 2>&1 | tee gradle-release.log
+          # Unsigned here, so the file names carry a -unsigned suffix that the
+          # signed release build does not; count every APK rather than match a name.
+          count=$(ls -1 app/build/outputs/apk/release/*.apk | wc -l)
+          test "$count" -eq 5 || { echo "expected 5 release APKs, built $count"; exit 1; }
+          ls -l app/build/outputs/apk/release/
+
       # Downloading a job log needs write access to the repository, so a failure
       # here would otherwise be readable only by someone with admin rights. A
       # workflow command turns the compiler's own output into a check annotation,
@@ -92,10 +109,10 @@ jobs:
               lines > 120 { exit }
             ' app/build/test-results/testDebugUnitTest/*.xml 2>/dev/null
           }
-          ls -l gradle-tests.log gradle-build.log 2>&1 | sed 's/^/log: /'
-          details=$(summarise gradle-tests.log gradle-build.log; failures)
+          ls -l gradle-tests.log gradle-build.log gradle-release.log 2>&1 | sed 's/^/log: /'
+          details=$(summarise gradle-tests.log gradle-build.log gradle-release.log; failures)
           if [ -z "$details" ]; then
-            details=$(tail -n 40 gradle-tests.log gradle-build.log 2>/dev/null)
+            details=$(tail -n 40 gradle-tests.log gradle-build.log gradle-release.log 2>/dev/null)
           fi
           # Paths are absolute on the runner and add nothing here; the repository
           # path is what a reader needs.
@@ -111,7 +128,7 @@ jobs:
             echo '### Build failure'
             echo
             echo '```'
-            summarise gradle-tests.log gradle-build.log
+            summarise gradle-tests.log gradle-build.log gradle-release.log
             failures
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

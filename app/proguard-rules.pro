@@ -22,22 +22,14 @@
 -keep class * extends androidx.room.RoomDatabase { <init>(); }
 -dontwarn androidx.room.paging.**
 
-# ---------------- osmdroid ----------------
-# Tile sources and overlays are looked up reflectively; its own config is minimal.
--keep class org.osmdroid.** { *; }
--dontwarn org.osmdroid.**
-
-# ---------------- mapsforge (vector offline maps) ----------------
-# The renderer resolves theme element handlers by class name out of the render
-# theme XML, so R8 cannot see those uses and would strip them.
--keep class org.mapsforge.** { *; }
--dontwarn org.mapsforge.**
-# Desktop-only AWT backend referenced by shared mapsforge code. Never loaded on
-# Android, but R8 still wants the symbols resolved.
--dontwarn java.awt.**
--dontwarn javax.imageio.**
--dontwarn javax.xml.stream.**
--dontwarn org.xmlpull.**
+# ---------------- MapLibre and SQLCipher ----------------
+# Nothing needed here on purpose. Both are native libraries whose C++ looks Java
+# classes up by name, and both ship consumer rules inside their AAR that R8 reads
+# automatically: MapLibre keeps the gson types, NativeMapOptions, RenderingStats
+# and TileOperation, and every one of the other 70 classes its .so names carries
+# @Keep; SQLCipher keeps net.zetetic.** native methods, constructors and the
+# fields its JNI writes. Adding a blanket -keep for either would only stop R8
+# shrinking code the libraries themselves declared removable.
 
 # ---------------- Misc ----------------
 -dontwarn org.conscrypt.**
