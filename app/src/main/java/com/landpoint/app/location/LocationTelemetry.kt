@@ -92,20 +92,16 @@ data class GnssSnapshot(
 }
 
 /**
- * Everything known about where the phone is, in one object, for one panel.
+ * One position as the receiver described it, ready to be read off a screen.
  *
  * Every figure here comes from Android and is passed on unchanged; nothing is
  * interpolated, and nothing is filled in when it is missing. That is the point of
  * the type: a telemetry panel that shows a plausible speed for a phone that never
  * reported one teaches the user to trust a number the hardware did not produce.
  *
- * @param moving what the sensors make of whether the phone is being carried. Used
- *   for the smoothing strength and the update interval, and shown because a user
- *   who is standing still and sees "moving" knows to stop trusting the heading.
- * @param compassDeg the device's own heading from the rotation-vector sensor,
- *   corrected to true north. Present so that a phone standing still can still say
- *   which way it is pointing, which a GPS bearing cannot: below walking pace the
- *   bearing a receiver reports is the direction its noise happened to drift.
+ * What the *device* knows — the sky, whether it is being carried, which way it
+ * points — is not here but in [TrackingState], because none of it depends on there
+ * being a position and all of it is worth showing while there is not.
  */
 data class LocationTelemetry(
     val latitude: Double,
@@ -115,13 +111,37 @@ data class LocationTelemetry(
     val speedMps: Double?,
     val bearingDeg: Double?,
     val timestamp: Long,
-    val source: FixSource,
+    val source: FixSource
+) {
+    /** The accuracy-based verdict, or null when the fix carries no accuracy. */
+    val quality: FixQuality? get() = accuracyM?.let { FixQuality.of(it) }
+}
+
+/**
+ * Everything tracking knows at one moment, in one object, for one panel.
+ *
+ * A position is the part that may be missing, and the part that takes longest to
+ * arrive — thirty seconds under a canopy is normal. The rest is available almost
+ * at once, and it is what tells the user whether waiting will help: two satellites
+ * at 18 dB-Hz means move into the open, nine at 40 means stay put a moment longer.
+ * So the sky, the motion verdict and the compass sit beside the fix rather than
+ * inside it, and the panel has something honest to show from the first second.
+ *
+ * @param moving what the sensors make of whether the phone is being carried. Used
+ *   for the smoothing strength and the update interval, and shown because a user
+ *   who is standing still and sees "moving" knows to stop trusting the heading.
+ * @param compassDeg the device's own heading from the rotation-vector sensor,
+ *   corrected to true north. Present so that a phone standing still can still say
+ *   which way it is pointing, which a GPS bearing cannot: below walking pace the
+ *   bearing a receiver reports is the direction its noise happened to drift.
+ */
+data class TrackingState(
+    val fix: LocationTelemetry? = null,
     val satellites: GnssSnapshot = GnssSnapshot(),
     val moving: Boolean = false,
     val compassDeg: Double? = null
 ) {
-    /** The accuracy-based verdict, or null when the fix carries no accuracy. */
-    val quality: FixQuality? get() = accuracyM?.let { FixQuality.of(it) }
+    val hasFix: Boolean get() = fix != null
 
     /**
      * The heading worth showing, in degrees from true north, or null if neither
@@ -132,11 +152,14 @@ data class LocationTelemetry(
      * there is no direction of travel, so the compass answers instead.
      */
     val heading: Double?
-        get() = if (moving && bearingDeg != null) bearingDeg else compassDeg ?: bearingDeg
+        get() {
+            val bearing = fix?.bearingDeg
+            return if (moving && bearing != null) bearing else compassDeg ?: bearing
+        }
 
     /** Whether [heading] came from the compass rather than from movement. */
     val headingIsCompass: Boolean
-        get() = compassDeg != null && !(moving && bearingDeg != null)
+        get() = compassDeg != null && !(moving && fix?.bearingDeg != null)
 }
 
 /**

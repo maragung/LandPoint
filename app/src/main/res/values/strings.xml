@@ -547,6 +547,45 @@
     <string name="map_attribution_topo">© OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)</string>
     <string name="corner_picker_show_controls">Show the corner tools</string>
     <string name="corner_picker_hide_controls">Hide the corner tools, show more map</string>
+    <!-- Live position readout over the map: what the receiver is reporting right
+         now, and how much of it to believe. Every figure comes from Android
+         unchanged, so "not reported" is said rather than a nought printed. -->
+    <string name="telemetry_show">Show the position readout</string>
+    <string name="telemetry_hide">Hide the position readout</string>
+    <string name="telemetry_title">Your position</string>
+    <string name="telemetry_waiting">Looking for your position…</string>
+    <string name="telemetry_waiting_short">No position yet</string>
+    <string name="telemetry_latitude">Latitude</string>
+    <string name="telemetry_longitude">Longitude</string>
+    <string name="telemetry_accuracy">Accuracy</string>
+    <string name="telemetry_altitude">Altitude</string>
+    <string name="telemetry_speed">Speed</string>
+    <string name="telemetry_heading">Heading</string>
+    <string name="telemetry_source">Fix from</string>
+    <string name="telemetry_satellites">Satellites</string>
+    <string name="telemetry_signal">Signal</string>
+    <string name="telemetry_motion">Movement</string>
+    <string name="telemetry_updated">Reported at</string>
+    <string name="telemetry_unknown">Not reported</string>
+    <string name="telemetry_value_speed">%1$s m/s · %2$s km/h</string>
+    <string name="telemetry_value_heading">%1$d° %2$s</string>
+    <string name="telemetry_value_heading_compass">%1$d° %2$s · compass</string>
+    <string name="telemetry_value_satellites">%1$d of %2$d used in the fix</string>
+    <string name="telemetry_value_satellites_short">%1$d/%2$d sat</string>
+    <string name="telemetry_value_signal">%1$s · %2$s dB-Hz</string>
+    <string name="telemetry_value_moving">Being carried</string>
+    <string name="telemetry_value_still">Held still</string>
+    <string name="telemetry_source_gps">Satellites (GPS)</string>
+    <string name="telemetry_source_fused">The phone\'s own blend</string>
+    <string name="telemetry_source_network">Mobile network or Wi-Fi</string>
+    <string name="telemetry_source_other">Another provider</string>
+    <string name="telemetry_signal_none">Nothing heard</string>
+    <string name="telemetry_signal_weak">Weak</string>
+    <string name="telemetry_signal_fair">Fair</string>
+    <string name="telemetry_signal_strong">Strong</string>
+    <!-- The one-line version, read out and shown on the collapsed chip. -->
+    <string name="telemetry_summary">%1$s · %2$s</string>
+
     <!-- Offline maps screen: framing an area on the map, costing it, and the
          list of what is already saved. -->
     <string name="offline_title">Offline maps</string>

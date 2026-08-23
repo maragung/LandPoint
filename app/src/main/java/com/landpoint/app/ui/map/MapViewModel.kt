@@ -6,15 +6,14 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.landpoint.app.data.LandRepository
 import com.landpoint.app.data.model.Land
-import com.landpoint.app.location.LocationProvider
+import com.landpoint.app.location.LocationTracker
+import com.landpoint.app.location.TrackingState
 import com.landpoint.app.ui.container
 import com.landpoint.app.util.GeoPoint
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 
 data class MapUiState(
     val lands: List<Land> = emptyList(),
@@ -35,26 +34,56 @@ data class MapUiState(
      * offers.
      */
     val currentLocation: GeoPoint? = null,
+    /**
+     * Everything else the receiver is saying, for the readout over the map.
+     *
+     * Present even before there is a position: the satellite count is what tells a
+     * user standing under a canopy whether waiting will help.
+     */
+    val tracking: TrackingState = TrackingState(),
     val isLoading: Boolean = true
 )
 
 class MapViewModel(
     repository: LandRepository,
-    private val locationProvider: LocationProvider
+    tracker: LocationTracker
 ) : ViewModel() {
 
-    private val currentLocation = MutableStateFlow<GeoPoint?>(null)
+    /**
+     * Live tracking while the map is on screen, and nothing while it is not.
+     *
+     * `WhileSubscribed` is doing real work here rather than tidying: the flow
+     * underneath holds the GNSS callback, the accelerometer, the rotation vector and
+     * a location request, and all four stop the moment the last collector goes. Five
+     * seconds of grace so that turning the phone — which tears the screen down and
+     * builds it again — does not restart the radios and lose the fix.
+     */
+    private val tracking: StateFlow<TrackingState> = tracker.observe()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = TrackingState()
+        )
 
     val uiState: StateFlow<MapUiState> = combine(
         repository.observeLands(),
-        currentLocation
-    ) { lands, location ->
+        tracking
+    ) { lands, tracked ->
         MapUiState(
             lands = lands,
             boundaries = lands.filter { it.isPolygon }
                 .associate { it.id to it.boundary }
                 .filterValues { it.size >= 3 },
-            currentLocation = location,
+            // The map's dot and the readout's numbers are the same fix seen twice, so
+            // they are derived from one value rather than kept in step by hand.
+            currentLocation = tracked.fix?.let {
+                GeoPoint(
+                    latitude = it.latitude,
+                    longitude = it.longitude,
+                    accuracyM = it.accuracyM
+                )
+            },
+            tracking = tracked,
             isLoading = false
         )
     }.stateIn(
@@ -63,27 +92,11 @@ class MapViewModel(
         initialValue = MapUiState()
     )
 
-    init {
-        refreshLocation()
-    }
-
-    fun refreshLocation() {
-        viewModelScope.launch {
-            locationProvider.getCurrentLocation()?.let { fix ->
-                currentLocation.value = GeoPoint(
-                    latitude = fix.latitude,
-                    longitude = fix.longitude,
-                    accuracyM = fix.accuracy?.toDouble()
-                )
-            }
-        }
-    }
-
     companion object {
         val Factory = viewModelFactory {
             initializer {
                 val c = container()
-                MapViewModel(c.repository, c.locationProvider)
+                MapViewModel(c.repository, c.locationTracker)
             }
         }
     }

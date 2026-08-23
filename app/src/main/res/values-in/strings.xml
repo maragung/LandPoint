@@ -526,6 +526,45 @@
     <string name="map_attribution_topo">© OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)</string>
     <string name="corner_picker_show_controls">Tampilkan alat sudut</string>
     <string name="corner_picker_hide_controls">Sembunyikan alat sudut, perluas peta</string>
+    <!-- Panel posisi langsung di atas peta: apa yang dilaporkan penerima saat ini,
+         dan seberapa jauh angka itu bisa dipercaya. Semua angka datang apa adanya
+         dari Android, jadi yang tidak ada ditulis "tidak dilaporkan", bukan nol. -->
+    <string name="telemetry_show">Tampilkan data posisi</string>
+    <string name="telemetry_hide">Sembunyikan data posisi</string>
+    <string name="telemetry_title">Posisi Anda</string>
+    <string name="telemetry_waiting">Mencari posisi Anda…</string>
+    <string name="telemetry_waiting_short">Belum ada posisi</string>
+    <string name="telemetry_latitude">Lintang</string>
+    <string name="telemetry_longitude">Bujur</string>
+    <string name="telemetry_accuracy">Akurasi</string>
+    <string name="telemetry_altitude">Ketinggian</string>
+    <string name="telemetry_speed">Kecepatan</string>
+    <string name="telemetry_heading">Arah</string>
+    <string name="telemetry_source">Sumber posisi</string>
+    <string name="telemetry_satellites">Satelit</string>
+    <string name="telemetry_signal">Sinyal</string>
+    <string name="telemetry_motion">Gerakan</string>
+    <string name="telemetry_updated">Dilaporkan</string>
+    <string name="telemetry_unknown">Tidak dilaporkan</string>
+    <string name="telemetry_value_speed">%1$s m/s · %2$s km/jam</string>
+    <string name="telemetry_value_heading">%1$d° %2$s</string>
+    <string name="telemetry_value_heading_compass">%1$d° %2$s · kompas</string>
+    <string name="telemetry_value_satellites">%1$d dari %2$d dipakai</string>
+    <string name="telemetry_value_satellites_short">%1$d/%2$d sat</string>
+    <string name="telemetry_value_signal">%1$s · %2$s dB-Hz</string>
+    <string name="telemetry_value_moving">Sedang dibawa</string>
+    <string name="telemetry_value_still">Diam</string>
+    <string name="telemetry_source_gps">Satelit (GPS)</string>
+    <string name="telemetry_source_fused">Gabungan bawaan HP</string>
+    <string name="telemetry_source_network">Jaringan seluler atau Wi-Fi</string>
+    <string name="telemetry_source_other">Sumber lain</string>
+    <string name="telemetry_signal_none">Tidak terdengar</string>
+    <string name="telemetry_signal_weak">Lemah</string>
+    <string name="telemetry_signal_fair">Cukup</string>
+    <string name="telemetry_signal_strong">Kuat</string>
+    <!-- Versi satu baris, dibacakan dan ditampilkan pada chip yang diciutkan. -->
+    <string name="telemetry_summary">%1$s · %2$s</string>
+
     <!-- Layar peta offline: membingkai area di peta, menghitung biayanya, dan
          daftar yang sudah tersimpan. -->
     <string name="offline_title">Peta offline</string>

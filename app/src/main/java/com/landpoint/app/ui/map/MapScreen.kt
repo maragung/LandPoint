@@ -1,13 +1,18 @@
 package com.landpoint.app.ui.map
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
@@ -19,6 +24,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.landpoint.app.R
 import com.landpoint.app.ui.components.BasemapSheet
 import com.landpoint.app.ui.components.LandMap
+import com.landpoint.app.ui.components.LocationAccessChip
 import com.landpoint.app.ui.components.MapAttribution
 import com.landpoint.app.ui.components.MapFitAction
 import com.landpoint.app.ui.components.MapFix
@@ -30,7 +36,9 @@ import com.landpoint.app.ui.components.MapSideControls
 import com.landpoint.app.ui.components.MapStyleAction
 import com.landpoint.app.ui.components.MapTap
 import com.landpoint.app.ui.components.MapTopChrome
+import com.landpoint.app.ui.components.TelemetryPanel
 import com.landpoint.app.ui.components.rememberLandMapController
+import com.landpoint.app.ui.components.rememberLocationPermission
 import com.landpoint.app.ui.components.rememberMapPrefs
 import com.landpoint.app.util.GeoPoint
 
@@ -58,6 +66,16 @@ fun MapScreen(
     val prefs = rememberMapPrefs()
     val controller = rememberLandMapController()
     val accent = MaterialTheme.colorScheme.primary.toArgb()
+
+    // Saved, so turning the phone does not close a readout the user opened to watch
+    // the accuracy settle.
+    var readoutOpen by rememberSaveable { mutableStateOf(false) }
+
+    // Not requested on arrival: the map is worth looking at without a position, and
+    // a dialog thrown at someone who only wanted to see their plots is the kind of
+    // prompt people refuse for good. The chip below offers it when they want it, and
+    // tracking picks the permission up on its own once granted.
+    val permission = rememberLocationPermission()
 
     // Everything worth having on screen: boundary corners where a land has them,
     // its pin where it does not, and failing both, wherever the phone is. Measured
@@ -135,24 +153,38 @@ fun MapScreen(
             modifier = Modifier.align(Alignment.CenterEnd),
             onZoomIn = controller::zoomIn,
             onZoomOut = controller::zoomOut,
-            // Always offered, unlike on the screens that are handed a position:
-            // this one can go and ask for a fresh fix, so the button has
-            // something to do even before there is a dot to jump to.
-            onMyLocation = {
-                viewModel.refreshLocation()
-                state.currentLocation?.let {
-                    controller.frame(listOf(it), SINGLE_LAND_ZOOM, animated = true)
-                }
+            // Dropped until there is somewhere to jump to. Tracking is already
+            // running while this screen is open, so the fix arrives on its own and
+            // the button appears with it — a button that acknowledges a tap and then
+            // does nothing is worse than one that is not there yet.
+            onMyLocation = state.currentLocation?.let { fix ->
+                { controller.frame(listOf(fix), SINGLE_LAND_ZOOM, animated = true) }
             }
         )
 
-        MapScaleBar(
-            controller = controller,
-            imperial = prefs.imperial,
+        // The readout sits above the scale bar rather than anywhere of its own: both
+        // answer "how big is what I am looking at", and the map's own corners are
+        // already spoken for by the chrome.
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(horizontal = 8.dp, vertical = 6.dp)
-        )
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            if (permission.isGranted) {
+                TelemetryPanel(
+                    state = state.tracking,
+                    expanded = readoutOpen,
+                    onExpandedChange = { readoutOpen = it }
+                )
+            } else {
+                LocationAccessChip(
+                    onClick = permission.request,
+                    blocked = permission.isBlocked
+                )
+            }
+            MapScaleBar(controller = controller, imperial = prefs.imperial)
+        }
 
         // Required, not decorative: every style here is somebody else's work, shown
         // on the condition that it is credited where it is drawn.

@@ -270,54 +270,71 @@ class LocationTelemetryTest {
 
     // -- Which heading to show ---------------------------------------------
 
-    private fun telemetry(
+    private fun tracking(
         bearingDeg: Double? = null,
         compassDeg: Double? = null,
         moving: Boolean = false,
-        accuracyM: Double? = 5.0
-    ) = LocationTelemetry(
-        latitude = lat,
-        longitude = lon,
-        accuracyM = accuracyM,
-        altitudeM = null,
-        speedMps = null,
-        bearingDeg = bearingDeg,
-        timestamp = 0L,
-        source = FixSource.GPS,
+        accuracyM: Double? = 5.0,
+        hasFix: Boolean = true
+    ) = TrackingState(
+        fix = if (hasFix) {
+            LocationTelemetry(
+                latitude = lat,
+                longitude = lon,
+                accuracyM = accuracyM,
+                altitudeM = null,
+                speedMps = null,
+                bearingDeg = bearingDeg,
+                timestamp = 0L,
+                source = FixSource.GPS
+            )
+        } else {
+            null
+        },
         moving = moving,
         compassDeg = compassDeg
     )
 
     @Test
     fun `a moving phone shows its direction of travel`() {
-        val reading = telemetry(bearingDeg = 90.0, compassDeg = 270.0, moving = true)
+        val reading = tracking(bearingDeg = 90.0, compassDeg = 270.0, moving = true)
         assertEquals(90.0, reading.heading!!, 0.0)
         assertFalse(reading.headingIsCompass)
     }
 
     @Test
     fun `a stationary phone shows the compass instead`() {
-        val reading = telemetry(bearingDeg = 90.0, compassDeg = 270.0, moving = false)
+        val reading = tracking(bearingDeg = 90.0, compassDeg = 270.0, moving = false)
         assertEquals(270.0, reading.heading!!, 0.0)
         assertTrue(reading.headingIsCompass)
     }
 
     @Test
     fun `a phone with no compass falls back to the reported bearing`() {
-        val reading = telemetry(bearingDeg = 90.0, compassDeg = null, moving = false)
+        val reading = tracking(bearingDeg = 90.0, compassDeg = null, moving = false)
         assertEquals(90.0, reading.heading!!, 0.0)
         assertFalse(reading.headingIsCompass)
     }
 
     @Test
     fun `no heading is claimed when neither source has one`() {
-        assertNull(telemetry().heading)
+        assertNull(tracking().heading)
+    }
+
+    @Test
+    fun `the compass is shown before there is any fix at all`() {
+        // The whole reason the sky, the motion verdict and the compass live outside
+        // the fix: they arrive in the first second, and the fix may take thirty.
+        val reading = tracking(compassDeg = 200.0, hasFix = false)
+        assertFalse(reading.hasFix)
+        assertEquals(200.0, reading.heading!!, 0.0)
+        assertTrue(reading.headingIsCompass)
     }
 
     @Test
     fun `a fix with no accuracy is given no quality verdict`() {
-        assertNull(telemetry(accuracyM = null).quality)
-        assertEquals(FixQuality.of(5.0), telemetry(accuracyM = 5.0).quality)
+        assertNull(tracking(accuracyM = null).fix!!.quality)
+        assertEquals(FixQuality.of(5.0), tracking(accuracyM = 5.0).fix!!.quality)
     }
 
     // -- Compass smoothing -------------------------------------------------

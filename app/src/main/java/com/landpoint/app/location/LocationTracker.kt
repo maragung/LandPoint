@@ -4,21 +4,24 @@ import android.hardware.GeomagneticField
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 
 /**
- * One live reading of where the phone is, assembled from everything that knows.
+ * Everything that knows where the phone is, joined into one live reading.
  *
- * The pieces exist separately and are all honest on their own: [LocationProvider]
+ * The pieces exist separately and are each honest on their own: [LocationProvider]
  * gives what Android reported, [GnssSignal] gives what the satellites are doing,
  * [DeviceSensors] gives whether the phone is being carried and which way it points.
- * This is where they are combined into the single object a screen can show, and it is
- * the only place in the app that does so — so there is one answer to "where are we",
- * not one per screen.
+ * This is where they are combined into the single [TrackingState] a screen can show,
+ * and it is the only place in the app that does so — so there is one answer to
+ * "where are we", not one per screen.
  *
  * Three properties are worth stating, because each is a decision rather than a
  * consequence:
@@ -43,38 +46,37 @@ class LocationTracker(
 ) {
 
     /**
-     * Telemetry, for as long as it is collected.
+     * Tracking state, for as long as it is collected.
      *
-     * Emits on every fix, on every satellite report once there is a fix to attach it
-     * to, and on a compass reading at most [COMPASS_MIN_GAP_MS] apart — the rotation
-     * vector arrives about fifteen times a second and no one reads a number that
-     * fast.
+     * Emits on every fix, on every satellite report — with or without a position, so
+     * a user waiting under a canopy can see why — and on a compass reading at most
+     * [COMPASS_MIN_GAP_MS] apart, since the rotation vector arrives about fifteen
+     * times a second and no one reads a number that fast.
      *
      * Emits nothing at all when there is no permission and no provider, rather than
      * failing: the screens already show the permission state themselves, and a
-     * thrown `SecurityException` inside a `viewModelScope` would end the process.
+     * thrown `SecurityException` inside a `viewModelScope` would end the process. It
+     * keeps asking, though — see [restartingOnEnd] — so granting the permission or
+     * switching location on starts tracking without leaving the screen.
      */
-    fun observe(): Flow<LocationTelemetry> = channelFlow {
+    fun observe(): Flow<TrackingState> = channelFlow {
         val gate = MotionGate()
         val smoother = PositionSmoother()
-        var satellites = GnssSnapshot()
-        var compass: Double? = null
+        var state = TrackingState()
         var declination = 0.0
-        var latest: LocationTelemetry? = null
         var lastCompassAt = 0L
 
-        suspend fun publish(telemetry: LocationTelemetry) {
-            latest = telemetry
-            send(telemetry)
+        suspend fun publish(next: TrackingState) {
+            state = next
+            send(next)
         }
 
         // What the sky looks like. Independent of having a position — a user standing
         // under a roof needs to see two satellites at 20 dB-Hz to understand why
         // there is no fix yet, and that report arrives whether or not one comes.
         launch {
-            gnss.observe().collect { snapshot ->
-                satellites = snapshot
-                latest?.let { publish(it.copy(satellites = snapshot, moving = gate.moving)) }
+            gnss.observe().restartingOnEnd(RETRY_GAP_MS).collect { snapshot ->
+                publish(state.copy(satellites = snapshot, moving = gate.moving))
             }
         }
 
@@ -88,13 +90,12 @@ class LocationTracker(
         // declination for wherever the last fix was.
         launch {
             sensors.observeHeading().collect { magnetic ->
-                val trueNorth = normalise(magnetic + declination)
-                compass = trueNorth
-                val current = latest ?: return@collect
                 val now = System.currentTimeMillis()
                 if (now - lastCompassAt < COMPASS_MIN_GAP_MS) return@collect
                 lastCompassAt = now
-                publish(current.copy(compassDeg = trueNorth, moving = gate.moving))
+                publish(
+                    state.copy(compassDeg = normalise(magnetic + declination), moving = gate.moving)
+                )
             }
         }
 
@@ -107,8 +108,8 @@ class LocationTracker(
         // outlier and hold the marker back from where the user actually is.
         launch {
             val bootstrap = provider.getCurrentLocation() ?: return@launch
-            if (latest != null) return@launch
-            publish(bootstrap.toTelemetry(satellites = satellites, moving = gate.moving, compassDeg = compass))
+            if (state.hasFix) return@launch
+            publish(state.copy(fix = bootstrap.toTelemetry()))
         }
 
         // Live fixes, at an interval that follows how good they are.
@@ -123,27 +124,29 @@ class LocationTracker(
                 // is a different one.
                 subscription?.cancelAndJoin()
                 subscription = launch {
-                    provider.observeLocation(wanted.intervalMs, wanted.minDistanceM).collect { fix ->
-                        gate.onSpeed(fix.speed?.toDouble())
-                        val accuracyM = fix.accuracy?.toDouble()
-                        val moving = gate.moving
-                        val (latitude, longitude) =
-                            smoother.feed(fix.latitude, fix.longitude, accuracyM, moving)
-                        declination = declinationAt(fix)
-                        publish(
-                            fix.toTelemetry(
-                                satellites = satellites,
-                                moving = moving,
-                                compassDeg = compass,
-                                latitude = latitude,
-                                longitude = longitude
+                    provider.observeLocation(wanted.intervalMs, wanted.minDistanceM)
+                        .restartingOnEnd(RETRY_GAP_MS)
+                        .collect { fix ->
+                            gate.onSpeed(fix.speed?.toDouble())
+                            val accuracyM = fix.accuracy?.toDouble()
+                            val moving = gate.moving
+                            val (latitude, longitude) =
+                                smoother.feed(fix.latitude, fix.longitude, accuracyM, moving)
+                            declination = declinationAt(fix)
+                            publish(
+                                state.copy(
+                                    fix = fix.toTelemetry(
+                                        latitude = latitude,
+                                        longitude = longitude
+                                    ),
+                                    moving = moving
+                                )
                             )
-                        )
-                        cadence.value = Cadence(
-                            intervalMs = TrackingCadence.intervalMs(accuracyM, moving),
-                            minDistanceM = TrackingCadence.minDistanceM(accuracyM, moving)
-                        )
-                    }
+                            cadence.value = Cadence(
+                                intervalMs = TrackingCadence.intervalMs(accuracyM, moving),
+                                minDistanceM = TrackingCadence.minDistanceM(accuracyM, moving)
+                            )
+                        }
                 }
             }
         }
@@ -152,11 +155,11 @@ class LocationTracker(
     /**
      * Degrees between magnetic north and true north where the fix was taken.
      *
-     * Bearings everywhere else in LandPoint — exports, area calculations, the
-     * boundary drawing — are true-north bearings, because that is what a land
-     * document means by a direction. A compass reading is not, and the difference
-     * reaches ten degrees in parts of Indonesia's east. Converting here keeps the
-     * distinction out of the UI, which only ever sees one kind of north.
+     * Bearings everywhere else in LandPoint — exports, side lengths, the boundary
+     * drawing — are true-north bearings, because that is what a land document means
+     * by a direction. A compass reading is not, and the difference reaches several
+     * degrees across Indonesia. Converting here keeps the distinction out of the UI,
+     * which only ever sees one kind of north.
      */
     private fun declinationAt(fix: LocationData): Double = runCatching {
         GeomagneticField(
@@ -168,9 +171,6 @@ class LocationTracker(
     }.getOrDefault(0.0)
 
     private fun LocationData.toTelemetry(
-        satellites: GnssSnapshot,
-        moving: Boolean,
-        compassDeg: Double?,
         latitude: Double = this.latitude,
         longitude: Double = this.longitude
     ) = LocationTelemetry(
@@ -181,24 +181,52 @@ class LocationTracker(
         speedMps = speed?.toDouble(),
         bearingDeg = bearing?.toDouble()?.let { normalise(it) },
         timestamp = timestamp,
-        source = FixSource.of(provider),
-        satellites = satellites,
-        moving = moving,
-        compassDeg = compassDeg
+        // Qualified: `provider` alone would still resolve to this fix's own
+        // provider name, but the tracker holds a LocationProvider by that name too,
+        // and a reader should not have to work out which one wins.
+        source = FixSource.of(this.provider)
     )
+
+    /**
+     * Subscribes again, [gapMs] later, to a stream that ended.
+     *
+     * The location and satellite streams end quietly instead of throwing when there
+     * is nothing to listen to: permission refused, or every provider switched off.
+     * Both are things the user can put right — in the permission dialog, or in the
+     * system's own quick settings — while this screen stays open, and neither sends
+     * any signal back to say so. Asking again on a slow loop is what makes tracking
+     * recover on its own instead of only after the screen is left and reopened.
+     *
+     * A working stream never reaches the delay: `callbackFlow` with `awaitClose` runs
+     * until its collector stops, so this costs nothing whenever tracking is live.
+     */
+    private fun <T> Flow<T>.restartingOnEnd(gapMs: Long): Flow<T> = flow {
+        while (true) {
+            emitAll(this@restartingOnEnd)
+            delay(gapMs)
+        }
+    }
 
     private fun normalise(degrees: Double): Double = (degrees % FULL_TURN + FULL_TURN) % FULL_TURN
 
     private companion object {
-        /** Enough for the panel to look live, slow enough for a person to read. */
+        /** Fast enough for the panel to look live, slow enough for a person to read. */
         const val COMPASS_MIN_GAP_MS = 250L
 
         const val FULL_TURN = 360.0
 
         /**
+         * How long to wait before asking a refused subscription again.
+         *
+         * Long enough that a permanent refusal is not a busy loop, short enough that
+         * granting the permission looks immediate to the person who just granted it.
+         */
+        const val RETRY_GAP_MS = 5_000L
+
+        /**
          * A short buffer, dropping the oldest reading when a collector falls behind.
          *
-         * Telemetry is a current state, not a log: a screen that was slow to
+         * Tracking state is a current state, not a log: a screen that was slow to
          * recompose wants the newest position, and replaying a queue of stale ones
          * would walk the marker through where the user has already been.
          */
@@ -208,4 +236,3 @@ class LocationTracker(
 
 /** How often, and after how far, to ask for the next fix. */
 private data class Cadence(val intervalMs: Long, val minDistanceM: Float)
-

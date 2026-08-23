@@ -9,7 +9,10 @@ import com.landpoint.app.data.db.LandDatabase
 import com.landpoint.app.data.export.BackupManager
 import com.landpoint.app.data.export.ImportExportManager
 import com.landpoint.app.data.export.PdfExporter
+import com.landpoint.app.location.DeviceSensors
+import com.landpoint.app.location.GnssSignal
 import com.landpoint.app.location.LocationProvider
+import com.landpoint.app.location.LocationTracker
 import com.landpoint.app.map.MapStyleFactory
 import com.landpoint.app.map.offline.ArchiveStore
 import com.landpoint.app.map.offline.OfflineDownloadCoordinator
@@ -81,6 +84,25 @@ class AppContainer(context: Context) {
     val settings: SettingsRepository by lazy { SettingsRepository(appContext) }
 
     val locationProvider: LocationProvider by lazy { LocationProvider(appContext) }
+
+    /**
+     * The joined live reading: fix, satellites, motion, compass.
+     *
+     * Shared rather than built per ViewModel because the sources underneath are
+     * device-wide. Two trackers would mean two `GnssStatus` callbacks and two sets of
+     * sensor listeners for one phone, which costs battery and gives two screens
+     * slightly different answers to the same question.
+     *
+     * Holding it here starts nothing: `observe()` is cold, so the radios wake only
+     * while a screen is collecting.
+     */
+    val locationTracker: LocationTracker by lazy {
+        LocationTracker(
+            provider = locationProvider,
+            gnss = GnssSignal(appContext),
+            sensors = DeviceSensors(appContext)
+        )
+    }
 
     val importExport: ImportExportManager by lazy { ImportExportManager(appContext, repository) }
 
