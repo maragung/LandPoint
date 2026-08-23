@@ -15,8 +15,6 @@
     <string name="action_share">Share</string>
     <string name="action_search">Search</string>
     <string name="action_sort">Sort</string>
-    <string name="action_map">Map</string>
-    <string name="action_settings">Settings</string>
     <string name="action_navigate">Navigate</string>
     <string name="action_compass">Compass</string>
     <string name="action_export_pdf">Export PDF</string>
@@ -62,7 +60,6 @@
     <string name="group_no_parcel">No parcel number</string>
 
     <!-- Selecting several lands at once -->
-    <string name="action_select">Select</string>
     <string name="action_select_all">Select all shown</string>
     <string name="action_clear_selection">Clear selection</string>
     <string name="action_export_selected">Export selected</string>
@@ -180,8 +177,6 @@
     <string name="boundary_corner_number">#%1$d  %2$s</string>
     <string name="boundary_side_next">→ #%1$d  %2$s m  %3$s° %4$s</string>
     <string name="boundary_corner_accuracy">±%1$s m</string>
-    <string name="boundary_corner_edit">Edit corner %1$d</string>
-    <string name="boundary_corner_delete">Delete corner %1$d</string>
     <string name="boundary_corner_up">Move corner %1$d earlier</string>
     <string name="boundary_corner_down">Move corner %1$d later</string>
     <string name="boundary_corners_show_all">Show all %1$d corners</string>
@@ -221,7 +216,6 @@
     </plurals>
     <string name="corner_picker_select_hint">Tap a corner to select it.</string>
     <string name="corner_picker_delete_selected">Delete corner %1$d</string>
-    <string name="corner_picker_deselect">Clear selection</string>
 
     <!-- Boundary preview -->
     <string name="shape_title">Boundary</string>

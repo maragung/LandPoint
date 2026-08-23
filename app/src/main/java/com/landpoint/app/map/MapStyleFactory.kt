@@ -247,4 +247,4 @@ class MapStyleFactory(private val assets: AssetManager) {
  * rejects a relative one, and that failure surfaces as an empty map rather than as
  * an error, so the path is settled at import time in [MapProviders].
  */
-internal fun pmtilesUrl(path: String) = "pmtiles://$path"
+private fun pmtilesUrl(path: String) = "pmtiles://$path"
