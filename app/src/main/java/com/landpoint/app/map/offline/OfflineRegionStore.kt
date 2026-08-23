@@ -106,7 +106,9 @@ class OfflineRegionStore(private val context: Context) {
             meta.maxZoom.toDouble(),
             pixelRatio
         )
-        val region = suspendCancellableCoroutine { continuation ->
+        // Typed explicitly: the failure path resumes with null, and left to infer
+        // from that alone the coroutine's type collapses to Nothing?.
+        val region = suspendCancellableCoroutine<OfflineRegion?> { continuation ->
             manageOnMain().createOfflineRegion(
                 definition,
                 meta.encode(),
@@ -256,11 +258,14 @@ class OfflineRegionStore(private val context: Context) {
     private suspend fun statusOf(region: OfflineRegion): RegionStatus =
         suspendCancellableCoroutine { continuation ->
             region.getStatus(object : OfflineRegion.OfflineRegionStatusCallback {
-                override fun onStatus(status: OfflineRegionStatus) {
-                    continuation.resume(status.toRegionStatus())
+                // Both parameters are nullable in MapLibre's own signature, unlike the
+                // observer's, so they are taken as written: a null reading is a reading
+                // that did not arrive, and is reported as an empty one.
+                override fun onStatus(status: OfflineRegionStatus?) {
+                    continuation.resume(status?.toRegionStatus() ?: RegionStatus())
                 }
 
-                override fun onError(error: String) {
+                override fun onError(error: String?) {
                     Log.w(TAG, "getStatus: $error")
                     continuation.resume(RegionStatus())
                 }

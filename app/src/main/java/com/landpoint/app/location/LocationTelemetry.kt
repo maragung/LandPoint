@@ -102,6 +102,10 @@ data class GnssSnapshot(
  * @param moving what the sensors make of whether the phone is being carried. Used
  *   for the smoothing strength and the update interval, and shown because a user
  *   who is standing still and sees "moving" knows to stop trusting the heading.
+ * @param compassDeg the device's own heading from the rotation-vector sensor,
+ *   corrected to true north. Present so that a phone standing still can still say
+ *   which way it is pointing, which a GPS bearing cannot: below walking pace the
+ *   bearing a receiver reports is the direction its noise happened to drift.
  */
 data class LocationTelemetry(
     val latitude: Double,
@@ -113,10 +117,26 @@ data class LocationTelemetry(
     val timestamp: Long,
     val source: FixSource,
     val satellites: GnssSnapshot = GnssSnapshot(),
-    val moving: Boolean = false
+    val moving: Boolean = false,
+    val compassDeg: Double? = null
 ) {
     /** The accuracy-based verdict, or null when the fix carries no accuracy. */
     val quality: FixQuality? get() = accuracyM?.let { FixQuality.of(it) }
+
+    /**
+     * The heading worth showing, in degrees from true north, or null if neither
+     * source has one.
+     *
+     * The fix's own bearing wins while the phone is being carried — it is the
+     * direction of travel, which is what a heading means on a map. Standing still
+     * there is no direction of travel, so the compass answers instead.
+     */
+    val heading: Double?
+        get() = if (moving && bearingDeg != null) bearingDeg else compassDeg ?: bearingDeg
+
+    /** Whether [heading] came from the compass rather than from movement. */
+    val headingIsCompass: Boolean
+        get() = compassDeg != null && !(moving && bearingDeg != null)
 }
 
 /**
@@ -233,7 +253,13 @@ class MotionGate {
         /** Roughly 3 km/h — slower than this is not a walk the map should follow. */
         const val WALKING_MPS = 0.8
 
-        /** Per-reading weight of history. At ~50 Hz this smooths over a second. */
+        /**
+         * Per-reading weight of history.
+         *
+         * At the UI sampling rate this averages over the last half-second or so,
+         * which is the difference between an indicator that reads "walking" and one
+         * that flickers on every footfall.
+         */
         const val DECAY = 0.9
 
         /**
