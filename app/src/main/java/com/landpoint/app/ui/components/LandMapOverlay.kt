@@ -20,7 +20,7 @@ import org.maplibre.geojson.Point
 import org.maplibre.geojson.Polygon
 
 /**
- * Everything the app draws on top of a basemap, as five GeoJSON sources and eight
+ * Everything the app draws on top of a basemap, as six GeoJSON sources and ten
  * layers.
  *
  * The previous engine drew each of these as its own view object: one `Polygon` per
@@ -53,6 +53,7 @@ internal class LandMapOverlay {
     private var corners: FeatureCollection = EMPTY
     private var accuracy: FeatureCollection = EMPTY
     private var fix: FeatureCollection = EMPTY
+    private var pending: FeatureCollection = EMPTY
 
     /**
      * Attaches to a freshly loaded style.
@@ -85,6 +86,7 @@ internal class LandMapOverlay {
         pins: List<MapPin>,
         corners: List<MapCorner>,
         fix: MapFix?,
+        pending: GeoPoint?,
         accentColour: Int,
         selectedColour: Int
     ) {
@@ -99,6 +101,9 @@ internal class LandMapOverlay {
             listOfNotNull(fix?.toAccuracyFeature())
         )
         this.fix = FeatureCollection.fromFeatures(listOfNotNull(fix?.toDotFeature()))
+        this.pending = FeatureCollection.fromFeatures(
+            listOfNotNull(pending?.toPendingFeature())
+        )
 
         if (recolour) applyColours()
         push()
@@ -118,6 +123,7 @@ internal class LandMapOverlay {
         style.addSource(GeoJsonSource(SRC_FIX, fix))
         style.addSource(GeoJsonSource(SRC_PINS, pins))
         style.addSource(GeoJsonSource(SRC_CORNERS, corners))
+        style.addSource(GeoJsonSource(SRC_PENDING, pending))
 
         style.addLayer(
             FillLayer(LAYER_SHAPE_FILL, SRC_SHAPES).withProperties(
@@ -190,6 +196,33 @@ internal class LandMapOverlay {
                 PropertyFactory.textIgnorePlacement(true)
             )
         )
+        // Last of all, so the mark being positioned is never hidden under the corner
+        // it is about to be slotted next to — a mark the user cannot see is a mark
+        // they cannot drag, and dragging it is the whole point of it existing.
+        //
+        // Two layers rather than one: an open ring wide enough to get a fingertip on
+        // without covering the ground being judged, and a small dot at the exact
+        // coordinates, because the ring's centre is where the corner will go and a
+        // ring alone leaves that to the eye.
+        style.addLayer(
+            CircleLayer(LAYER_PENDING_RING, SRC_PENDING).withProperties(
+                PropertyFactory.circleRadius(PENDING_RING_RADIUS),
+                // Nothing painted inside: this sits over whatever the user is lining
+                // the corner up against — a fence, a ditch, the edge of a crop.
+                PropertyFactory.circleOpacity(0f),
+                PropertyFactory.circleStrokeWidth(PENDING_RING_STROKE),
+                PropertyFactory.circleStrokeColor(selected)
+            )
+        )
+        style.addLayer(
+            CircleLayer(LAYER_PENDING, SRC_PENDING).withProperties(
+                PropertyFactory.circleRadius(PENDING_RADIUS),
+                PropertyFactory.circleColor(selected),
+                PropertyFactory.circleStrokeWidth(PENDING_STROKE),
+                // White against both dark imagery and pale dry paddy.
+                PropertyFactory.circleStrokeColor(AndroidColor.WHITE)
+            )
+        )
     }
 
     /** Repaints the layers that follow the theme, without rebuilding them. */
@@ -205,6 +238,10 @@ internal class LandMapOverlay {
             ?.setProperties(PropertyFactory.circleColor(accent))
         style.getLayerAs<CircleLayer>(LAYER_CORNER)
             ?.setProperties(PropertyFactory.circleColor(cornerColour()))
+        style.getLayerAs<CircleLayer>(LAYER_PENDING_RING)
+            ?.setProperties(PropertyFactory.circleStrokeColor(selected))
+        style.getLayerAs<CircleLayer>(LAYER_PENDING)
+            ?.setProperties(PropertyFactory.circleColor(selected))
     }
 
     private fun push() {
@@ -217,6 +254,7 @@ internal class LandMapOverlay {
         style.getSourceAs<GeoJsonSource>(SRC_FIX)?.setGeoJson(fix)
         style.getSourceAs<GeoJsonSource>(SRC_PINS)?.setGeoJson(pins)
         style.getSourceAs<GeoJsonSource>(SRC_CORNERS)?.setGeoJson(corners)
+        style.getSourceAs<GeoJsonSource>(SRC_PENDING)?.setGeoJson(pending)
     }
 
     /** Selected corners are bigger, ringed thicker and painted apart. */
@@ -248,6 +286,7 @@ internal class LandMapOverlay {
         const val SRC_CORNERS = "lp-corners"
         const val SRC_ACCURACY = "lp-accuracy"
         const val SRC_FIX = "lp-fix"
+        const val SRC_PENDING = "lp-pending"
 
         const val LAYER_SHAPE_FILL = "lp-shape-fill"
         const val LAYER_SHAPE_LINE = "lp-shape-line"
@@ -257,6 +296,8 @@ internal class LandMapOverlay {
         const val LAYER_PIN = "lp-pin-dot"
         const val LAYER_CORNER = "lp-corner-dot"
         const val LAYER_CORNER_LABEL = "lp-corner-label"
+        const val LAYER_PENDING_RING = "lp-pending-ring"
+        const val LAYER_PENDING = "lp-pending-dot"
 
         /**
          * Tap targets, in the order a tap is offered to them.
@@ -268,6 +309,24 @@ internal class LandMapOverlay {
          */
         val CORNER_LAYERS = arrayOf(LAYER_CORNER, LAYER_CORNER_LABEL)
         val PIN_LAYERS = arrayOf(LAYER_PIN, LAYER_PIN_HALO)
+
+        /**
+         * The mark being positioned, asked about before anything else.
+         *
+         * Its own list rather than an entry prepended to [CORNER_LAYERS], because a
+         * single query over both would leave it to `firstNotNullOfOrNull` which of
+         * the two answers came back — and the mark has to win: it is deliberately
+         * drawn on top of the corner the user is correcting.
+         */
+        val PENDING_LAYERS = arrayOf(LAYER_PENDING, LAYER_PENDING_RING)
+
+        /**
+         * The mark's overlay id.
+         *
+         * A constant, because there is only ever one of them: placing a second mark
+         * replaces the first rather than adding to it.
+         */
+        const val PENDING_ID = "lp-pending-mark"
 
         /** Both, so an edge can be tapped where the fill is only a hairline wide. */
         val SHAPE_LAYERS = arrayOf(LAYER_SHAPE_FILL, LAYER_SHAPE_LINE)
@@ -300,6 +359,19 @@ internal class LandMapOverlay {
         private const val CORNER_STROKE_ON = 3f
         private const val CORNER_TEXT = 11f
         private const val CORNER_TEXT_ON = 13f
+
+        /**
+         * The mark is drawn larger than a corner, and hollow.
+         *
+         * Larger because it is the thing under the finger — 15 style units is about a
+         * 7 mm target on any density, which is a fingertip. Hollow because a filled
+         * disc that size would cover the very patch of ground the user is placing it
+         * against.
+         */
+        private const val PENDING_RING_RADIUS = 15f
+        private const val PENDING_RING_STROKE = 3f
+        private const val PENDING_RADIUS = 3.5f
+        private const val PENDING_STROKE = 1.5f
 
         /**
          * Vertices in the drawn accuracy circle.
@@ -376,6 +448,17 @@ internal class LandMapOverlay {
 
         private fun MapFix.toDotFeature(): Feature =
             Feature.fromGeometry(Point.fromLngLat(longitude, latitude))
+
+        /**
+         * The provisional mark, carrying an id so a touch can be matched to it.
+         *
+         * Unlike a corner it has no label and no selected flag: it is not part of the
+         * ring yet, so it has no number to draw and nothing to be selected against.
+         */
+        private fun GeoPoint.toPendingFeature(): Feature =
+            Feature.fromGeometry(Point.fromLngLat(longitude, latitude)).apply {
+                addStringProperty(PROP_ID, PENDING_ID)
+            }
     }
 }
 

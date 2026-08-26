@@ -69,8 +69,15 @@ object MapProviders {
      * enlarge it, which is still the right answer for someone standing on a corner
      * they are trying to place — a blurred picture of the correct ground beats a
      * refusal to go closer.
+     *
+     * The figure is set by what has to be readable rather than by what the tiles
+     * hold. MapLibre's world is 512 px per tile, so the scale bar's widest span at
+     * 96 dp is `40075017 × cos(lat) / (512 × 2^zoom) × 96` metres: 50 m at zoom 17,
+     * 20 m at 18, 10 m at 19, 5 m at 20 and 2 m at 21. A user placing a boundary peg
+     * needs to see the metre they are arguing about, and until 1.5.2 the camera
+     * stopped one rung short of it.
      */
-    const val DEEPEST_ZOOM = 20.0
+    const val DEEPEST_ZOOM = 21.0
 
     /**
      * The bundled street style, in the OpenMapTiles schema, served by OpenFreeMap.
@@ -131,7 +138,9 @@ object MapProviders {
      * but not all; zoom 20 at none. So 18 is the tier that can be relied on, 19 is
      * asked for as well and simply fails where it is absent, and the camera is allowed
      * past both — at [DEEPEST_ZOOM] what the user sees is the deepest photograph that
-     * exists, enlarged.
+     * exists, enlarged four times in a town where the deep tier is served and eight
+     * times where only the base is. Soft, and honestly so: the boundary marks are
+     * still where they are, and the scale bar beside them still says 2 m.
      */
     private val satellite = MapProvider(
         mode = BasemapMode.SATELLITE,
@@ -154,10 +163,14 @@ object MapProviders {
      * OpenTopoMap: OpenStreetMap data plus SRTM relief, published CC-BY-SA — so the
      * credit on screen is a licence condition rather than a courtesy.
      *
-     * The one style whose camera stops where its tiles do. Enlarging a contour line
-     * adds nothing: the relief is drawn from 30 m elevation samples, so a closer view
-     * would be an invented shape rather than a coarse picture of a real one. Imagery
-     * is the opposite case, and is treated the opposite way.
+     * Its tiles stop at 17 and its camera no longer does. That was the other way
+     * round until 1.5.2, on the reasoning that enlarging a contour drawn from 30 m
+     * elevation samples invents a shape nobody surveyed — true, but it also floored
+     * this style's scale bar at 50 m, so a user who preferred relief could not see
+     * the metre they were placing a peg to. A blurred contour beside a 10 m bar is
+     * the lesser fault: the contour was always an approximation, while a camera that
+     * refuses to go closer is a wall. So the camera reaches 19 here, three rungs
+     * shallower than the styles whose sources can keep up.
      */
     private val terrain = MapProvider(
         mode = BasemapMode.TERRAIN,
@@ -169,10 +182,13 @@ object MapProviders {
             ),
             tileSize = 256,
             attribution = "© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)",
+            // Still 17: OpenTopoMap publishes nothing deeper, and asking for a tile
+            // that does not exist is how a map ends up drawing a server's apology.
             sourceMaxZoom = 17.0
         ),
         minZoom = 0.0,
-        maxZoom = 17.0
+        // Deeper than the tiles, the way imagery already is — see the note above.
+        maxZoom = 19.0
     )
 
     /** Every style that does not depend on the user having imported anything. */

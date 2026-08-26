@@ -1,5 +1,6 @@
 package com.landpoint.app.ui.components
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,8 +31,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.landpoint.app.R
@@ -224,6 +228,79 @@ fun MapFitAction(onClick: () -> Unit) {
         contentDescription = stringResource(R.string.map_fit),
         onClick = onClick
     )
+}
+
+/**
+ * How wide the sight is drawn.
+ *
+ * Wide enough to be found without looking for it, and no wider: every pixel of it is
+ * over the ground the user is trying to judge.
+ */
+private val CROSSHAIR_SIZE = 32.dp
+
+/**
+ * The clear space left in the middle.
+ *
+ * The point being aimed at is the one place nothing may be drawn — a sight with ink
+ * at its centre hides the fence corner it is being lined up on. The four arms point
+ * at an empty gap and let the eye close it.
+ */
+private val CROSSHAIR_GAP = 5.dp
+
+private val CROSSHAIR_INK = 1.5.dp
+private val CROSSHAIR_HALO = 4.dp
+
+/**
+ * The sight at the centre of the map, for placing a mark without touching the ground
+ * you are aiming at.
+ *
+ * A fingertip covers several metres at the zoom a corner is placed at, so tapping the
+ * spot means putting a finger over it. Panning the map under a fixed sight does not:
+ * the target stays visible the whole way in, which is why this exists alongside
+ * tapping rather than instead of it.
+ *
+ * Drawn twice — a pale wide stroke, then a coloured narrow one over it — because this
+ * has to stay visible over anything the basemap might put underneath, from a dark
+ * aerial photograph of a tree line to bleached dry paddy. One colour alone
+ * disappears into one of those.
+ *
+ * No content description, and none wanted: a screen reader user places a mark with
+ * the button and the nudge arrows, and a decoration announcing itself between them
+ * would be noise. The button beside it is what carries the meaning.
+ */
+@Composable
+fun MapCrosshair(modifier: Modifier = Modifier) {
+    val ink = MaterialTheme.colorScheme.tertiary
+    val halo = MaterialTheme.colorScheme.surface
+    Canvas(
+        modifier = modifier
+            .size(CROSSHAIR_SIZE)
+            .clearAndSetSemantics { }
+    ) {
+        val midX = size.width / 2f
+        val midY = size.height / 2f
+        val gap = CROSSHAIR_GAP.toPx()
+        val arm = size.minDimension / 2f
+        val arms = listOf(
+            Offset(midX, midY - gap) to Offset(midX, midY - arm),
+            Offset(midX, midY + gap) to Offset(midX, midY + arm),
+            Offset(midX - gap, midY) to Offset(midX - arm, midY),
+            Offset(midX + gap, midY) to Offset(midX + arm, midY)
+        )
+        // Halo underneath all four arms before any ink goes down, so a wide stroke
+        // never paints over the narrow one that was already drawn beside it.
+        listOf(halo to CROSSHAIR_HALO.toPx(), ink to CROSSHAIR_INK.toPx()).forEach { (colour, width) ->
+            arms.forEach { (from, to) ->
+                drawLine(
+                    color = colour,
+                    start = from,
+                    end = to,
+                    strokeWidth = width,
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+    }
 }
 
 /**

@@ -17,6 +17,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.pow
@@ -56,10 +58,15 @@ fun MapScaleBar(
     modifier: Modifier = Modifier,
     imperial: Boolean = false
 ) {
-    val metresPerPixel = controller.metresPerPixel
+    val density = LocalDensity.current
+    // The measurement first, always: it is the only one of the two that carries the
+    // live camera. The closed form stands in for the frames where there is nothing to
+    // measure across — a map view rebuilt by a rotation is unmeasured while the camera
+    // is already known — so the bar comes back with the map rather than a beat later.
+    val metresPerPixel = controller.metresPerPixel.takeIf { it > 0.0 }
+        ?: controller.predictedMetresPerPixel(density.density)
     if (metresPerPixel <= 0.0) return
 
-    val density = LocalDensity.current
     val widest = with(density) { SCALE_BAR_MAX_WIDTH.toPx() }
     val step = scaleStep(metresPerPixel * widest, imperial) ?: return
     val barWidth: Dp = with(density) { (step.metres / metresPerPixel).toFloat().toDp() }
@@ -106,6 +113,24 @@ fun MapScaleBar(
             }
         }
     }
+}
+
+/**
+ * What the scale would be at the camera's last resting place, in device pixels, or
+ * 0.0 when even that is unknown.
+ *
+ * The division by [densityScale] is the whole reason this is not simply
+ * [metresPerDp]: that answers in MapLibre's own pixels, which are density-independent,
+ * while [LandMapController.metresPerPixel] answers in the device pixels the bar's
+ * width is then computed in. Mixing the two would mis-size the bar by the display's
+ * density factor — a three-fold error on a modern phone, and one that looks like a
+ * plausible bar rather than like a bug.
+ */
+private fun LandMapController.predictedMetresPerPixel(densityScale: Float): Double {
+    if (densityScale <= 0f) return 0.0
+    val zoom = cameraZoom ?: return 0.0
+    val latitude = cameraLatitude ?: return 0.0
+    return metresPerDp(zoom, latitude) / densityScale
 }
 
 private const val SCALE_BAR_ALPHA = 0.92f
@@ -164,4 +189,46 @@ private fun roundDown(ceiling: Double): Double? {
         ceiling >= 2.0 * magnitude -> 2.0 * magnitude
         else -> magnitude
     }
+}
+
+private const val EARTH_CIRCUMFERENCE_M = 40075017.0
+private const val MAPLIBRE_TILE_PX = 512.0
+private const val MERCATOR_MAX_LATITUDE_DEG = 85.05
+
+/**
+ * Ground metres spanned by one MapLibre dp at [zoom] and [latitudeDeg] — the scale the
+ * camera *can* reach, computed from the tile geometry rather than measured off a frame.
+ *
+ * MapLibre's world is [MAPLIBRE_TILE_PX] pixels per tile and doubles with every zoom
+ * level, and `Projection.fromScreenLocation` works in that space after dividing device
+ * pixels by `pixelRatio`; this app leaves `pixelRatio` at the display density, so one
+ * unit of it is one density-independent pixel. A pixel there covers
+ * `EARTH_CIRCUMFERENCE_M * cos(latitude) / (MAPLIBRE_TILE_PX * 2^zoom)`: narrower as the
+ * map zooms in, and narrower again away from the equator, where Mercator stretches the
+ * ground under the pixels.
+ *
+ * This is deliberately *not* the number the drawn bar is sized from. The bar keeps
+ * using the MEASURED [LandMapController.metresPerPixel], because that is read back
+ * through the live projection and so also carries any camera pitch and rotation — which
+ * this closed form assumes away and cannot recover from zoom and latitude alone. The
+ * function earns its place for the two jobs measurement cannot do:
+ *
+ *  - a first-frame fallback: `sampleScale()` has nothing to measure until the map view
+ *    is a hundred-odd pixels wide, so through the opening frames
+ *    [LandMapController.metresPerPixel] is still 0.0, and a caller that already knows the
+ *    camera's zoom and centre can size a bar from this instead of drawing none; and
+ *  - the tested contract, kept in `MapScaleMathTest`, for which round rung each zoom
+ *    *cap* can label — the standing proof that raising the camera limit is what lets the
+ *    bar reach 10 m and finer.
+ *
+ * Guarded so it can never hand the bar a NaN width, which would crash the layout pass:
+ * a non-finite [zoom] or [latitudeDeg] returns 0.0, which every caller already reads as
+ * "no scale yet", and [latitudeDeg] is clamped to the Web Mercator limit, past which
+ * `cos` no longer describes a square tile at all.
+ */
+internal fun metresPerDp(zoom: Double, latitudeDeg: Double): Double {
+    if (!zoom.isFinite() || !latitudeDeg.isFinite()) return 0.0
+    val latitude = latitudeDeg.coerceIn(-MERCATOR_MAX_LATITUDE_DEG, MERCATOR_MAX_LATITUDE_DEG)
+    return EARTH_CIRCUMFERENCE_M * cos(latitude * PI / 180.0) /
+        (MAPLIBRE_TILE_PX * 2.0.pow(zoom))
 }

@@ -115,4 +115,28 @@ class ScaleStepTest {
         assertTrue(step.label.endsWith(" ft"))
         assertEquals(5_000.0 / 3.28084, step.metres, 1e-6)
     }
+
+    @Test
+    fun `the fine rungs the deepened zoom caps reach are on the metric ladder`() {
+        // 1.2.0 capped the camera before these spans were reachable, so "no 10 m scale"
+        // was really "no bar this short". Raising the cap is only worth anything if the
+        // ladder has these rungs: 7 m of room is a 5 m bar (the z20 rung) and 3 m is a
+        // 2 m bar (z21), each rounded *down* to a number a person can halve by eye rather
+        // than labelling the ragged width itself.
+        assertEquals(5.0, metric(7.0)!!.metres, 0.0)
+        assertEquals(2.0, metric(3.0)!!.metres, 0.0)
+        assertEquals(1.0, metric(1.4)!!.metres, 0.0)
+        // Under a metre there is still no whole rung left, so still nothing is drawn.
+        assertNull(metric(0.99))
+    }
+
+    @Test
+    fun `the fine rung labels stay whole metres with no decimal point`() {
+        // "1.4 m" on a 1 m bar is exactly the mislabelling the whole-number rule exists
+        // to stop, and it bites hardest at the close-in zooms where the bar is shortest.
+        assertEquals("5 m", metric(7.0)!!.label)
+        assertEquals("2 m", metric(3.0)!!.label)
+        assertEquals("1 m", metric(1.4)!!.label)
+        assertTrue(listOf(7.0, 3.0, 1.4).mapNotNull { metric(it)?.label }.none { it.contains('.') })
+    }
 }

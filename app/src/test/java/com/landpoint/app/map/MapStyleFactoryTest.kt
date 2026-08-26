@@ -144,6 +144,20 @@ class MapStyleFactoryTest {
     }
 
     @Test
+    fun `every style can be zoomed in far enough to read a ten metre scale bar`() {
+        // The complaint this release answers: at 96 dp the scale bar's widest span is
+        // 40075017 x cos(lat) / (512 x 2^zoom) x 96 metres, which reaches the 10 m
+        // rung at zoom 19. Terrain used to stop at 17 and so floored its bar at 50 m,
+        // on a screen where the user was being asked to place a corner to the metre.
+        MapProviders.builtIn.forEach {
+            assertTrue(
+                "$it cannot reach a 10 m scale bar",
+                it.maxZoom >= 19.0
+            )
+        }
+    }
+
+    @Test
     fun `raster sources carry their attribution and their zoom limits`() {
         val terrain = provider(BasemapMode.TERRAIN)
         val spec = terrain.tiles as TileSpec.RasterXyz
@@ -154,10 +168,12 @@ class MapStyleFactoryTest {
 
         assertEquals("raster", source.text("type"))
         assertEquals(terrain.minZoom.toString(), source.text("minzoom"))
-        // The source's last published zoom, which is not in general the camera's
-        // limit — here they happen to agree, and for imagery they must not.
+        // The source's last published zoom, which is not the camera's limit: relief
+        // has now joined imagery in letting the camera go deeper than the tiles, so
+        // asserting these two agree would pin the terrain camera back to 17 and take
+        // the 10 m scale bar away from it again.
         assertEquals(spec.sourceMaxZoom.toString(), source.text("maxzoom"))
-        assertEquals(terrain.maxZoom.toString(), source.text("maxzoom"))
+        assertEquals("17.0", source.text("maxzoom"))
         // A licence condition, not a courtesy: OpenTopoMap is CC-BY-SA.
         assertTrue(source.text("attribution")!!.contains("OpenTopoMap"))
         assertEquals("256", source.text("tileSize"))
@@ -298,9 +314,11 @@ class MapStyleFactoryTest {
 
         assertEquals(terrain.minZoom, style.minZoom, 0.0)
         assertEquals(terrain.maxZoom, style.maxZoom, 0.0)
-        // 17, not the 20 every other style reaches: past it OpenTopoMap has nothing,
-        // and unlike a photograph a stretched contour line is a shape nobody surveyed.
-        assertEquals(17.0, style.maxZoom, 0.0)
+        // 19, two rungs shallower than the 21 the other styles reach — but far enough
+        // for a 10 m scale bar, which is the point of the number. Past 17 the contour
+        // lines are enlarged rather than redrawn, and that is the cheaper fault: a
+        // camera that stops is a wall, a blurred contour is still the right hill.
+        assertEquals(19.0, style.maxZoom, 0.0)
     }
 
     @Test

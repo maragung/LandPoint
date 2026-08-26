@@ -80,9 +80,11 @@ private const val ANCHOR_ZOOM = 12.0
 /**
  * The zoom levels a download may be asked for.
  *
- * Not the full 0–19 the camera allows. Below 6 an area is a continent and the tiles
- * are shared by every download anyway; the interesting range for a plot of land is
- * the top of it.
+ * Not the full 0–21 the camera allows: how deep you save is not how deep you look.
+ * Past 19 the street tiles are being redrawn from geometry the phone already has, so
+ * saving another level would double the download for no extra detail. Below 6 an area
+ * is a continent and the tiles are shared by every download anyway; the interesting
+ * range for a plot of land is the top of it.
  */
 private const val ZOOM_FLOOR = 6
 private const val ZOOM_CEILING = 19

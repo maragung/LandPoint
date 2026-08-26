@@ -261,6 +261,42 @@ class LandMapController internal constructor(
         sampleSelection()
     }
 
+    /**
+     * The camera's zoom as of the last time it came to rest, or null before it has.
+     *
+     * Compose state, so a caller that shows a distance derived from the zoom
+     * recomposes when the user stops pinching. Deliberately not sampled while the
+     * camera is moving: [metresPerPixel] already does that, from a measurement, and a
+     * second per-frame source of the same figure would only be a second chance to
+     * disagree with it.
+     *
+     * Null on a screen opened fresh, non-null immediately after rotation — which is
+     * the case it exists for. A map view rebuilt by a configuration change is
+     * unmeasured for a frame or two, and this is the only thing that knows where it
+     * is going to be pointing when it is.
+     */
+    val cameraZoom: Double? get() = cameraState.value?.zoom
+
+    /** The latitude that goes with [cameraZoom]; Mercator's scale depends on it. */
+    val cameraLatitude: Double? get() = cameraState.value?.target?.latitude
+
+    /**
+     * Where the middle of the screen is on the ground, right now, or null before the
+     * map exists.
+     *
+     * Read from the live camera when it is asked for rather than published as state:
+     * this answers a button press — "put a mark where the crosshair is" — and holding
+     * it in state would recompose whatever read it on every frame of every pan, for a
+     * value nothing looks at until a finger comes down.
+     *
+     * Falls back to the saved camera, so the button still works in the frames between
+     * a rotation and the new map view being handed over.
+     */
+    fun centerTarget(): GeoPoint? {
+        val target = map?.cameraPosition?.target ?: cameraState.value?.target ?: return null
+        return GeoPoint(target.latitude, target.longitude)
+    }
+
     /** One step in. */
     fun zoomIn() = zoomBy(ZOOM_STEP)
 
@@ -439,6 +475,11 @@ fun rememberLandMapController(fitPadding: Dp = FIT_PADDING): LandMapController {
  *   stream for touches that start on a corner, which is why a short press is
  *   reported as [MapTap.Corner] from here rather than by the map's own click
  *   handling.
+ * @param pending a mark the user is still positioning: drawn on top of everything
+ *   else, and pointedly not a corner. Null on every screen but the corner picker.
+ * @param onMovePending enables dragging that mark. Same bargain as [onMoveCorner]:
+ *   set it and touches that start on the mark belong to this view. Unlike a corner
+ *   the mark has no identity to report, because there is only ever one of them.
  */
 @SuppressLint("ClickableViewAccessibility")
 @Composable
@@ -451,12 +492,14 @@ fun LandMap(
     pins: List<MapPin> = emptyList(),
     corners: List<MapCorner> = emptyList(),
     fix: MapFix? = null,
+    pending: GeoPoint? = null,
     selectedColour: Int = accentColour,
     interactive: Boolean = true,
     contentDescription: String? = null,
     touchTolerance: Dp = 0.dp,
     onTap: ((MapTap) -> Unit)? = null,
-    onMoveCorner: ((id: String, latitude: Double, longitude: Double) -> Unit)? = null
+    onMoveCorner: ((id: String, latitude: Double, longitude: Double) -> Unit)? = null,
+    onMovePending: ((latitude: Double, longitude: Double) -> Unit)? = null
 ) {
     // Checked before anything else here, because every object remembered below is a
     // native one and the first of them would throw on construction. The answer is
@@ -483,6 +526,7 @@ fun LandMap(
     // lambdas for the life of the screen.
     val currentTap = rememberUpdatedState(onTap)
     val currentMove = rememberUpdatedState(onMoveCorner)
+    val currentMovePending = rememberUpdatedState(onMovePending)
 
     val mapView = remember(context) {
         MapView(
@@ -627,16 +671,24 @@ fun LandMap(
         }
     }
 
-    val draggable = interactive && onMoveCorner != null
-    DisposableEffect(maplibre, draggable) {
+    // Two independent reasons to take the touch stream, and the effect has to be
+    // keyed on both: the picker gains the mark handler part-way through its life,
+    // when the first mark is placed, and a dragger installed without it would go on
+    // handing the mark's touches to the map underneath.
+    val dragsCorners = interactive && onMoveCorner != null
+    val dragsPending = interactive && onMovePending != null
+    DisposableEffect(maplibre, dragsCorners, dragsPending) {
         val map = maplibre
-        if (map == null || !draggable) return@DisposableEffect onDispose { }
+        if (map == null || (!dragsCorners && !dragsPending)) return@DisposableEffect onDispose { }
         val dragger = CornerDragger(
             map = map,
             slopPx = slopPx,
             hitRadiusPx = tapRadiusPx,
-            onMove = { id, latitude, longitude ->
+            onMove = if (!dragsCorners) null else { id, latitude, longitude ->
                 currentMove.value?.invoke(id, latitude, longitude)
+            },
+            onMovePending = if (!dragsPending) null else { latitude, longitude ->
+                currentMovePending.value?.invoke(latitude, longitude)
             },
             onSelect = { id -> currentTap.value?.invoke(MapTap.Corner(id)) }
         )
@@ -649,7 +701,7 @@ fun LandMap(
         modifier = modifier,
         update = {
             it.describeForAccessibility(contentDescription)
-            overlay.set(shapes, pins, corners, fix, accentColour, selectedColour)
+            overlay.set(shapes, pins, corners, fix, pending, accentColour, selectedColour)
         }
     )
 }
@@ -733,42 +785,58 @@ private fun MapView.describeForAccessibility(description: String?) {
 }
 
 /**
- * Drags a corner under the finger, and reports a short press as a selection.
+ * Drags whatever the finger came down on — a corner, or the mark being positioned —
+ * and reports a short press on a corner as a selection.
  *
  * Sits in front of the map's own gesture handling, and only claims a touch that
- * starts on a corner — every other touch is handed straight back, so panning and
- * pinching are untouched.
+ * starts on one of those two things — every other touch is handed straight back, so
+ * panning and pinching are untouched.
  *
  * Because it claims the whole gesture including the initial press, the map's click
  * listener never sees a tap that began on a corner. That is why a release inside the
  * touch slop is reported as a selection from here: without it, tapping a corner to
  * select it would do nothing on exactly the screen where selecting corners matters.
+ * A release on the mark reports nothing — the mark is already where it is, and the
+ * confirmation bar is the thing that acts on it.
+ *
+ * @param onMove null when the caller does not allow corners to be dragged, in which
+ *   case a touch starting on a corner is left to the map's click handling as before.
+ * @param onMovePending null when there is no mark to drag.
  */
 private class CornerDragger(
     private val map: MapLibreMap,
     private val slopPx: Float,
     private val hitRadiusPx: Float,
-    private val onMove: (String, Double, Double) -> Unit,
+    private val onMove: ((String, Double, Double) -> Unit)?,
+    private val onMovePending: ((Double, Double) -> Unit)?,
     private val onSelect: (String) -> Unit
 ) {
-    private var dragging: String? = null
+    /** What is under the finger for the rest of this gesture. */
+    private sealed interface Grab {
+        data object Mark : Grab
+        data class Corner(val id: String) : Grab
+    }
+
+    private var dragging: Grab? = null
     private var moved = false
     private var downX = 0f
     private var downY = 0f
 
     fun onTouch(event: MotionEvent): Boolean = when (event.actionMasked) {
         MotionEvent.ACTION_DOWN -> {
-            val id = map.idAt(hitBox(event.x, event.y, hitRadiusPx), LandMapOverlay.CORNER_LAYERS)
-            dragging = id
+            dragging = grabAt(event.x, event.y)
             moved = false
             downX = event.x
             downY = event.y
-            id != null
+            // Only ever true for something actually held. This listener is in front of
+            // the map, so claiming a press on bare ground would take the whole gesture
+            // and with it pan and pinch.
+            dragging != null
         }
 
         MotionEvent.ACTION_MOVE -> {
-            val id = dragging
-            if (id == null) {
+            val grabbed = dragging
+            if (grabbed == null) {
                 false
             } else {
                 // Nothing moves until the finger has travelled far enough to mean it.
@@ -777,19 +845,22 @@ private class CornerDragger(
                 if (moved || hypot(event.x - downX, event.y - downY) >= slopPx) {
                     moved = true
                     val at = map.projection.fromScreenLocation(PointF(event.x, event.y))
-                    onMove(id, at.latitude, at.longitude)
+                    when (grabbed) {
+                        is Grab.Mark -> onMovePending?.invoke(at.latitude, at.longitude)
+                        is Grab.Corner -> onMove?.invoke(grabbed.id, at.latitude, at.longitude)
+                    }
                 }
                 true
             }
         }
 
         MotionEvent.ACTION_UP -> {
-            val id = dragging
+            val grabbed = dragging
             dragging = null
-            if (id == null) {
+            if (grabbed == null) {
                 false
             } else {
-                if (!moved) onSelect(id)
+                if (!moved && grabbed is Grab.Corner) onSelect(grabbed.id)
                 true
             }
         }
@@ -804,6 +875,24 @@ private class CornerDragger(
         // pinch the map never saw the beginning of. The drag follows pointer zero, so
         // it carries on from where it was.
         else -> dragging != null
+    }
+
+    /**
+     * The mark first, and as its own query.
+     *
+     * Two separate `queryRenderedFeatures` calls rather than one over both layer
+     * lists: within a single query the answer comes back through
+     * `firstNotNullOfOrNull`, which promises nothing about which layer wins. The mark
+     * is drawn over the corner it is being lined up against, so it has to win — a
+     * finger on a mark that sits on top of corner 3 must move the mark, not corner 3.
+     */
+    private fun grabAt(x: Float, y: Float): Grab? {
+        val box = hitBox(x, y, hitRadiusPx)
+        if (onMovePending != null && map.idAt(box, LandMapOverlay.PENDING_LAYERS) != null) {
+            return Grab.Mark
+        }
+        if (onMove == null) return null
+        return map.idAt(box, LandMapOverlay.CORNER_LAYERS)?.let(Grab::Corner)
     }
 }
 
