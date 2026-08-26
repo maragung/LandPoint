@@ -79,10 +79,63 @@ sealed interface Placement {
  */
 data class PendingMark(
     val point: GeoPoint,
-    val source: MarkSource
+    val source: MarkSource,
+    /**
+     * The list index this mark was measured out from, or null when it was placed
+     * without reference to a particular corner.
+     *
+     * Only the bearing path sets it, and it exists because a bearing carries a
+     * sequence the coordinates alone have lost: "50 m east of corner 2" belongs
+     * between corners 2 and 3, however far from either side the arithmetic put
+     * it. Without this the mark would be appended to the end of the ring and the
+     * side it describes would be drawn as a spike across the parcel.
+     */
+    val after: Int? = null
 ) {
 
+    /**
+     * What committing this mark would do to [existing], with [edgeToleranceM]
+     * read off the zoom the map is at.
+     *
+     * The confirm bar reads this on every recomposition, which is why it is a
+     * function of the draft rather than something stored on the mark: undoing a
+     * corner while a mark hangs there changes the answer, and a stored one would
+     * go on promising "corner 5" after corner 4 had gone.
+     */
+    fun placementIn(existing: List<GeoPoint>, edgeToleranceM: Double): Placement =
+        placement(existing, point, edgeToleranceM, after)
+
+    /**
+     * The same mark moved one step along [bearingDeg] — what an arrow button does.
+     *
+     * Comes back as a map mark whatever it was before, and that is the honest
+     * answer: a fix the user has nudged 40 cm north is no longer what the
+     * receiver reported, so it must not go on quoting that reading's accuracy.
+     * The mark is returned unchanged, identity and all, when the step is not a
+     * usable number.
+     */
+    fun nudged(bearingDeg: Double, stepM: Double): PendingMark {
+        val moved = nudge(point, bearingDeg, stepM)
+        return if (moved === point) this else copy(point = moved, source = MarkSource.MAP)
+    }
+
+    /** The same mark dragged under a finger to [latitude], [longitude]. */
+    fun movedTo(latitude: Double, longitude: Double): PendingMark =
+        copy(point = GeoPoint(latitude, longitude), source = MarkSource.MAP)
+
     companion object {
+
+        /**
+         * The nudge steps offered, coarsest first.
+         *
+         * Five metres to cross a yard, ten centimetres to sit on a peg. Chosen
+         * rather than a slider because the user is reading a number off a
+         * certificate or looking at a fence post, not exploring a range.
+         */
+        val STEPS_M: List<Double> = listOf(5.0, 1.0, 0.5, 0.1)
+
+        /** Half a metre: about the width of a boundary stone, and a sane default. */
+        const val DEFAULT_STEP_M: Double = 0.5
 
         /**
          * What [candidate] would become if it were committed to [existing] now.
@@ -96,17 +149,25 @@ data class PendingMark(
          *   metres on the ground at the zoom the mark was placed at. Zero for a
          *   mark that came from anywhere but a tap, which is exactly right — typed
          *   coordinates are not aiming at a side.
+         * @param after the corner index a bearing was measured from, which fixes
+         *   where the mark belongs regardless of [edgeToleranceM]. See
+         *   [PendingMark.after].
          */
         fun placement(
             existing: List<GeoPoint>,
             candidate: GeoPoint,
-            edgeToleranceM: Double
+            edgeToleranceM: Double,
+            after: Int? = null
         ): Placement {
             if (!CornerDraft.acceptTap(existing, candidate)) {
                 return Placement.TooClose(nearCorner = nearestCorner(existing, candidate))
             }
-            val at = BoundaryEdits.edgeNear(existing, candidate, edgeToleranceM)
-            return if (at == null || at > existing.size) Placement.Append(number = existing.size + 1)
+            // A stated sequence beats a guessed one: where the mark came from a
+            // bearing off a named corner, that corner decides, not how near the
+            // arithmetic happened to land to some other side.
+            val at = if (after != null && after in existing.indices) after + 1
+            else BoundaryEdits.edgeNear(existing, candidate, edgeToleranceM)
+            return if (at == null || at >= existing.size) Placement.Append(number = existing.size + 1)
             else Placement.Insert(at = at)
         }
 

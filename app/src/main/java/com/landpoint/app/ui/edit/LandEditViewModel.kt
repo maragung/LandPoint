@@ -26,9 +26,11 @@ import com.landpoint.app.location.WalkTrack
 import com.landpoint.app.ui.container
 import com.landpoint.app.util.AppStrings
 import com.landpoint.app.util.BoundaryEdits
-import com.landpoint.app.util.CornerDraft
 import com.landpoint.app.util.GeoPoint
 import com.landpoint.app.util.GeoUtils
+import com.landpoint.app.util.MarkSource
+import com.landpoint.app.util.PendingMark
+import com.landpoint.app.util.Placement
 import com.landpoint.app.util.PolygonMath
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -120,6 +122,37 @@ data class LandEditUiState(
      */
     val selectedCornerId: String? = null,
     /**
+     * The mark hanging on the map, not yet a corner. Null when nothing hangs.
+     *
+     * The whole of this release's answer to "a tap saved a corner I had not
+     * looked at properly". Deliberately outside [draftBoundary]: it adds nothing
+     * to the area, nothing to the outline and nothing to the corner numbers until
+     * [commitMark] turns it into a corner.
+     */
+    val pendingMark: PendingMark? = null,
+    /**
+     * How close to a side counted as being on it when the mark was placed, in
+     * metres of ground.
+     *
+     * Stored rather than recomputed from the live zoom so that the answer shown
+     * above the button is the answer the button gives: the same mark must not
+     * flip between "corner 5" and "insert between 2 and 3" because the user
+     * pinched the map while deciding.
+     */
+    val markToleranceM: Double = 0.0,
+    /** Which of [PendingMark.STEPS_M] the arrow buttons move by. */
+    val markStepM: Double = PendingMark.DEFAULT_STEP_M,
+    /** True while a fix is being averaged to place the mark with. */
+    val averagingFix: Boolean = false,
+    /**
+     * Whether to show the sentence explaining how the map marks a corner.
+     *
+     * Set from a stored flag when the picker opens and never set again in the same
+     * session, so it stays put while it is being read instead of vanishing when
+     * the flag is written. See [LandEditViewModel.dismissCornerHint].
+     */
+    val showCornerHint: Boolean = false,
+    /**
      * Other saved lands whose corners can be borrowed, nearest first. Loaded on
      * demand rather than held all the time: it is a list of every land in the
      * database and it is wanted once, while the sheet is open.
@@ -178,6 +211,13 @@ data class LandEditUiState(
             ?.takeIf { it >= 0 }
             ?.plus(1)
 
+    /**
+     * What committing [pendingMark] would do to the draft — before the button is
+     * pressed, which is the point of the mark.
+     */
+    val markPlacement: Placement?
+        get() = pendingMark?.placementIn(draftPoints, markToleranceM)
+
     /** Area of the shape being drawn, so the figure moves with each tap. */
     val draftAreaSqm: Double?
         get() = if (draftBoundary.size >= 3) PolygonMath.areaSqm(draftPoints) else null
@@ -205,7 +245,7 @@ class LandEditViewModel(
     private val photoStore: PhotoStore,
     private val photoStamper: PhotoStamper,
     private val strings: AppStrings,
-    settings: SettingsRepository,
+    private val settings: SettingsRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -223,6 +263,16 @@ class LandEditViewModel(
     val currentLocation: StateFlow<GeoPoint?> = _currentLocation.asStateFlow()
 
     private val landId: String? = savedStateHandle["landId"]
+
+    /**
+     * Whether the picker's one sentence of explanation has been shown before.
+     *
+     * A plain field, not state: what the screen reads is
+     * [LandEditUiState.showCornerHint], decided once per opening. This is only the
+     * stored answer, kept here so opening the map does not have to wait on a
+     * DataStore read that has already happened.
+     */
+    private var cornerHintDone: Boolean = false
 
     /** Held so a second tap restarts the capture instead of racing the first. */
     private var captureJob: Job? = null
@@ -265,6 +315,9 @@ class LandEditViewModel(
             settings.units.collect { units ->
                 _uiState.update { it.copy(units = units) }
             }
+        }
+        viewModelScope.launch {
+            settings.cornerHintDone.collect { cornerHintDone = it }
         }
         if (landId != null) load(landId) else captureLocation()
     }
@@ -347,62 +400,6 @@ class LandEditViewModel(
                 )
             }
             if (best != null) lookupAddress()
-        }
-    }
-
-    /**
-     * Adds the corner the user is standing on, averaged like a normal capture.
-     *
-     * Corners are taken deliberately, one tap per corner, rather than by
-     * auto-recording a walked track: a track samples GPS jitter as if it were
-     * shape, which inflates both the perimeter and the area. Standing still at
-     * each corner for a few seconds gives a boundary worth printing.
-     */
-    fun addBoundaryPoint() {
-        if (_uiState.value.isCapturingCorner) return
-        if (!locationProvider.isLocationEnabled()) {
-            _uiState.update { it.copy(message = strings.get(R.string.msg_location_off)) }
-            return
-        }
-
-        _uiState.update { it.copy(isCapturingCorner = true, message = null) }
-
-        cornerJob = viewModelScope.launch {
-            var best: AveragedFix? = null
-            locationProvider.captureAveraged().collect { progress ->
-                progress.fix?.let { best = it }
-                _uiState.update { it.copy(cornerSamples = progress.samples) }
-            }
-
-            val fix = best
-            _uiState.update { state ->
-                if (fix == null) {
-                    state.copy(
-                        isCapturingCorner = false,
-                        cornerSamples = 0,
-                        message = strings.get(R.string.msg_no_fix)
-                    )
-                } else {
-                    val candidate = GeoPoint(fix.latitude, fix.longitude, fix.accuracy)
-                    val previous = state.boundary.lastOrNull()
-                    if (!PolygonMath.isMeaningfulStep(previous, candidate, fix.accuracy)) {
-                        // Too close to the last corner to be a distinct one — most
-                        // likely a double tap, so say so rather than silently
-                        // adding a degenerate edge.
-                        state.copy(
-                            isCapturingCorner = false,
-                            cornerSamples = 0,
-                            message = strings.get(R.string.msg_corner_too_close)
-                        )
-                    } else {
-                        state.copy(
-                            boundary = state.boundary + candidate,
-                            isCapturingCorner = false,
-                            cornerSamples = 0
-                        )
-                    }
-                }
-            }
         }
     }
 
@@ -550,27 +547,6 @@ class LandEditViewModel(
     // the same guard `openCornerPicker` uses: those two rewrite the boundary
     // underneath, and an edit interleaved with them would be lost or fight them.
 
-    /**
-     * Adds a typed corner, or returns the reason it could not be added.
-     *
-     * Null means it went in. Anything else is a string resource for the caller to
-     * show *inside its own dialog*, beside the fields, rather than as a snackbar
-     * the dialog covers — and the dialog keeps the typed text, because retyping
-     * both coordinates over one wrong digit is how people give up on entering a
-     * boundary at all.
-     */
-    @StringRes
-    fun addBoundaryPointManual(latitude: String, longitude: String): Int? {
-        if (boundaryEditsBlocked()) return R.string.error_corner_busy
-        val point = BoundaryEdits.parseLatLon(latitude, longitude)
-            ?: return R.string.error_corner_invalid
-        if (!BoundaryEdits.isDistinct(_uiState.value.boundary, point)) {
-            return R.string.error_corner_duplicate
-        }
-        _uiState.update { it.copy(boundary = it.boundary + point) }
-        return null
-    }
-
     /** Retypes one corner in place, keeping its position in the ring. */
     @StringRes
     fun updateBoundaryPoint(index: Int, latitude: String, longitude: String): Int? {
@@ -583,56 +559,6 @@ class LandEditViewModel(
             return R.string.error_corner_duplicate
         }
         _uiState.update { it.copy(boundary = BoundaryEdits.replaceAt(it.boundary, index, point)) }
-        return null
-    }
-
-    /**
-     * Types a corner into the middle of the ring rather than onto the end.
-     *
-     * [index] is where it lands, so `1` puts it between corner #1 and corner #2.
-     * Appending and then pressing move-up until it arrives is the same edit, and
-     * on a seven-corner parcel it is five presses that each redraw the outline
-     * into a shape the user never meant.
-     */
-    @StringRes
-    fun insertBoundaryPointManual(index: Int, latitude: String, longitude: String): Int? {
-        if (boundaryEditsBlocked()) return R.string.error_corner_busy
-        val point = BoundaryEdits.parseLatLon(latitude, longitude)
-            ?: return R.string.error_corner_invalid
-        if (!BoundaryEdits.isDistinct(_uiState.value.boundary, point)) {
-            return R.string.error_corner_duplicate
-        }
-        _uiState.update { it.copy(boundary = BoundaryEdits.insertAt(it.boundary, index, point)) }
-        return null
-    }
-
-    /**
-     * Adds the corner a survey letter states as a bearing and a length from the
-     * corner before it, rather than as coordinates.
-     *
-     * This is how most of these boundaries are actually written down: one corner
-     * fixed, then each side as an azimuth and a distance. Typed in that form the
-     * figures go in as printed and the arithmetic is the app's problem, instead
-     * of the owner converting eight sides to coordinates by hand and having no
-     * way to find which one they got wrong.
-     *
-     * The new corner lands straight after [fromIndex], so measuring from the last
-     * corner continues the ring and measuring from a middle one splits its side.
-     */
-    @StringRes
-    fun insertBoundaryPointFromBearing(fromIndex: Int, bearing: String, distance: String): Int? {
-        if (boundaryEditsBlocked()) return R.string.error_corner_busy
-        val origin = _uiState.value.boundary.getOrNull(fromIndex)
-            ?: return R.string.error_corner_no_origin
-        val azimuth = BoundaryEdits.parseBearing(bearing) ?: return R.string.error_corner_bearing
-        val metres = BoundaryEdits.parseDistance(distance) ?: return R.string.error_corner_distance
-        val point = GeoUtils.destination(origin.latitude, origin.longitude, azimuth, metres)
-        if (!BoundaryEdits.isDistinct(_uiState.value.boundary, point)) {
-            return R.string.error_corner_duplicate
-        }
-        _uiState.update {
-            it.copy(boundary = BoundaryEdits.insertAt(it.boundary, fromIndex + 1, point))
-        }
         return null
     }
 
@@ -701,50 +627,22 @@ class LandEditViewModel(
             ?: BoundaryEdits.parseLatLon(state.latitude, state.longitude)
     }
 
-    /**
-     * Adds whichever corners of [neighbourId] the user ticked, skipping any that
-     * duplicate a corner already here.
-     *
-     * The skip count is returned through [showMessage] rather than swallowed:
-     * someone who ticks four and gets two corners has to be told which of those
-     * happened, or it looks like half their work disappeared. The message is not
-     * an error — reusing the shared peg is the right call — but it is a material
-     * outcome they need to see.
-     */
-    fun appendFromNeighbour(neighbourId: String, selectedIndices: Set<Int>) {
-        if (boundaryEditsBlocked()) {
-            showMessage(strings.get(R.string.error_corner_busy))
-            return
-        }
-        val land = _uiState.value.neighbours.find { it.id == neighbourId } ?: return
-        val additions = selectedIndices.sorted().mapNotNull { land.corners.getOrNull(it) }
-        if (additions.isEmpty()) return
-        val (updated, skipped) = BoundaryEdits.appendDistinct(_uiState.value.boundary, additions)
-        _uiState.update { it.copy(boundary = updated) }
-        val added = additions.size - skipped
-        showMessage(
-            when {
-                added > 0 && skipped == 0 -> strings.plural(R.plurals.msg_corners_added, added)
-                added > 0 && skipped > 0 -> strings.get(
-                    R.string.msg_corners_added_some_skipped,
-                    added.toString(),
-                    skipped.toString()
-                )
-                else -> strings.get(R.string.msg_corners_all_duplicate)
-            }
-        )
-    }
-
     private fun boundaryEditsBlocked(): Boolean =
         _uiState.value.let { it.isWalking || it.isCapturingCorner }
 
     // ---- Map corner picker ------------------------------------------------
     //
-    // Standing on every corner is the accurate method and stays the default. The
-    // map is for the corners that cannot be stood on: across a ditch, inside
-    // somebody else's crop, out in flooded paddy. Edits are held in a draft and
-    // only written back on commit, so backing out of the map leaves whatever
-    // boundary was already recorded exactly as it was.
+    // Every corner comes through here now, whether it was tapped, walked to,
+    // typed off a certificate or measured as a bearing from the corner before it.
+    // That is the point: the four paths that used to write a corner from a dialog
+    // or from a single fix did it without the user ever seeing that spot on their
+    // own land.
+    //
+    // Two levels of "not yet", and they are different. A mark hangs on the map
+    // until [commitMark] makes it a corner of the draft; the draft is written back
+    // to the boundary only by [commitCornerPicker]. So backing out of the map
+    // leaves whatever boundary was recorded exactly as it was, and backing out of
+    // a mark leaves the draft exactly as it was.
 
     fun openCornerPicker() {
         val state = _uiState.value
@@ -753,13 +651,25 @@ class LandEditViewModel(
         // map at the same time would have the two fighting over it.
         if (state.isWalking || state.isCapturingCorner) return
 
+        val explain = !cornerHintDone
         _uiState.update {
             it.copy(
                 isPickerOpen = true,
                 draftBoundary = it.boundary.map { point -> DraftCorner(newCornerId(), point) },
                 selectedCornerId = null,
+                pendingMark = null,
+                markToleranceM = 0.0,
+                averagingFix = false,
+                showCornerHint = explain,
                 message = null
             )
+        }
+        if (explain) {
+            // Spent on the way in rather than on the way out: a user who reads the
+            // sentence and immediately places a corner has been told, and a process
+            // death between the two would otherwise tell them again.
+            cornerHintDone = true
+            viewModelScope.launch { settings.setCornerHintDone(true) }
         }
 
         viewModelScope.launch {
@@ -774,8 +684,20 @@ class LandEditViewModel(
         }
     }
 
-    /** Accepts the drawn shape as the boundary. */
+    /**
+     * Accepts the drawn shape as the boundary.
+     *
+     * Refuses while a mark still hangs, and says so. Finishing would drop that
+     * mark on the floor: the user has placed it, lined it up, and would watch the
+     * screen close on a corner that never arrived — with the draft it belonged to
+     * gone as well. One question ("use it or throw it away?") is the cheaper
+     * outcome.
+     */
     fun commitCornerPicker() {
+        if (_uiState.value.pendingMark != null) {
+            _uiState.update { it.copy(message = strings.get(R.string.msg_mark_pending)) }
+            return
+        }
         cornerJob?.cancel()
         _uiState.update {
             it.copy(
@@ -784,7 +706,9 @@ class LandEditViewModel(
                 selectedCornerId = null,
                 isPickerOpen = false,
                 isCapturingCorner = false,
-                cornerSamples = 0
+                cornerSamples = 0,
+                averagingFix = false,
+                showCornerHint = false
             )
         }
     }
@@ -798,7 +722,269 @@ class LandEditViewModel(
             it.copy(
                 draftBoundary = emptyList(),
                 selectedCornerId = null,
+                pendingMark = null,
+                averagingFix = false,
                 isPickerOpen = false,
+                isCapturingCorner = false,
+                cornerSamples = 0,
+                showCornerHint = false
+            )
+        }
+    }
+
+    /**
+     * Puts the explanation away.
+     *
+     * The stored flag was already written when the picker opened, so this only
+     * clears it off this screen — there is nothing to undo and nothing to save.
+     */
+    fun dismissCornerHint() {
+        _uiState.update { it.copy(showCornerHint = false) }
+    }
+
+    // ---- The provisional mark ---------------------------------------------
+    //
+    // Placing a corner means judging a spot against a tree, a ditch or a roof
+    // line, and a fingertip covers several metres of ground at the zoom that
+    // judgement is made at. So nothing here writes a corner. Every one of these
+    // hangs a mark, replacing whatever hung before — one mark at a time, because
+    // two would need naming and the user is looking at one spot — and
+    // [commitMark] is the only door into the draft.
+
+    /**
+     * Hangs a mark at [latitude], [longitude] — the crosshair button's job.
+     *
+     * [edgeToleranceM] is a fingertip's width converted to ground distance at the
+     * zoom the map is at, and it is what lets a mark dropped on an outline be
+     * slotted into that side instead of tacked onto the end of the ring. It is
+     * stored with the mark rather than re-read later; see
+     * [LandEditUiState.markToleranceM].
+     */
+    fun placeMarkAt(latitude: Double, longitude: Double, edgeToleranceM: Double = 0.0) {
+        // A hand-placed mark overrules an average still being gathered: the user
+        // has just answered the question that averaging was asking.
+        cornerJob?.cancel()
+        _uiState.update {
+            it.copy(
+                pendingMark = PendingMark(GeoPoint(latitude, longitude), MarkSource.MAP),
+                markToleranceM = edgeToleranceM,
+                averagingFix = false,
+                isCapturingCorner = false,
+                cornerSamples = 0,
+                message = null
+            )
+        }
+    }
+
+    /** Follows the mark under a finger. Silent when nothing hangs. */
+    fun moveMark(latitude: Double, longitude: Double, edgeToleranceM: Double = 0.0) {
+        _uiState.update { state ->
+            val mark = state.pendingMark ?: return@update state
+            state.copy(
+                pendingMark = mark.movedTo(latitude, longitude),
+                markToleranceM = edgeToleranceM
+            )
+        }
+    }
+
+    /**
+     * Moves the mark one step along [bearingDeg] — what an arrow button does.
+     *
+     * The step is whatever the user chose, and the four arrows are the only way
+     * to place a corner to the metre on a phone: a fingertip cannot, and a screen
+     * reader cannot touch the map at all.
+     */
+    fun nudgeMark(bearingDeg: Double) {
+        _uiState.update { state ->
+            val mark = state.pendingMark ?: return@update state
+            state.copy(pendingMark = mark.nudged(bearingDeg, state.markStepM))
+        }
+    }
+
+    /** Chooses how far one arrow press moves the mark. */
+    fun setMarkStep(metres: Double) {
+        if (!metres.isFinite() || metres <= 0.0) return
+        _uiState.update { it.copy(markStepM = metres) }
+    }
+
+    /**
+     * Hangs a mark on the averaged position of the phone itself.
+     *
+     * Reuses the same averaging the corner-by-corner capture always used —
+     * weighted by reported accuracy, outliers dropped, a five-sample minimum —
+     * because a single fix is worth several metres of nothing. [cornerSamples] and
+     * the mark's own accuracy are left standing afterwards so the confirm bar can
+     * say what the user is about to accept: "±3.4 m from 7 readings" is a fact
+     * they can act on, where a bare dot on a map is not.
+     */
+    fun markFromFix() {
+        if (_uiState.value.averagingFix) return
+        if (!locationProvider.isLocationEnabled()) {
+            _uiState.update { it.copy(message = strings.get(R.string.msg_location_off)) }
+            return
+        }
+        _uiState.update {
+            it.copy(
+                averagingFix = true,
+                isCapturingCorner = true,
+                cornerSamples = 0,
+                message = null
+            )
+        }
+        cornerJob = viewModelScope.launch {
+            var best: AveragedFix? = null
+            locationProvider.captureAveraged().collect { progress ->
+                progress.fix?.let { best = it }
+                _uiState.update { it.copy(cornerSamples = progress.samples) }
+            }
+            val fix = best
+            _uiState.update { state ->
+                if (fix == null) {
+                    state.copy(
+                        averagingFix = false,
+                        isCapturingCorner = false,
+                        cornerSamples = 0,
+                        message = strings.get(R.string.msg_no_fix)
+                    )
+                } else {
+                    // No jitter guard here, unlike the capture this replaces: the
+                    // mark is on screen next to the corner it may be too close to,
+                    // and the confirm bar refuses it by name if it is.
+                    state.copy(
+                        pendingMark = PendingMark(
+                            GeoPoint(fix.latitude, fix.longitude, fix.accuracy),
+                            MarkSource.GPS
+                        ),
+                        markToleranceM = 0.0,
+                        averagingFix = false,
+                        isCapturingCorner = false
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Opens the map with a mark already being averaged where the user stands.
+     *
+     * What the quick GPS button on the form now does. The corner is not saved by
+     * pressing it — it is shown, on the ground it belongs to, and saved by
+     * pressing Use.
+     */
+    fun openCornerPickerAtFix() {
+        openCornerPicker()
+        if (!_uiState.value.isPickerOpen) return
+        markFromFix()
+    }
+
+    /**
+     * Hangs a mark on typed coordinates, straight off a certificate.
+     *
+     * No duplicate check, deliberately: a typed corner that sits on top of an
+     * existing one is refused by the confirm bar, by name, with the mark visible
+     * on the map beside the corner it clashes with. That is a better answer than
+     * a red line under a field saying the coordinates are already in the list.
+     *
+     * [edgeToleranceM] is the map's own reach at the zoom in force, and it matters
+     * for the same reason it matters to a tap: a certificate's next corner is often
+     * one that was left out of the middle of the ring, and typed coordinates that
+     * land on the side between #2 and #3 belong there rather than on the end. With
+     * no reach given, a typed corner can only be appended.
+     */
+    @StringRes
+    fun placeMarkTyped(latitude: String, longitude: String, edgeToleranceM: Double = 0.0): Int? {
+        val point = BoundaryEdits.parseLatLon(latitude, longitude)
+            ?: return R.string.error_corner_invalid
+        cornerJob?.cancel()
+        _uiState.update {
+            it.copy(
+                pendingMark = PendingMark(point, MarkSource.TYPED),
+                markToleranceM = edgeToleranceM,
+                averagingFix = false,
+                isCapturingCorner = false,
+                cornerSamples = 0,
+                message = null
+            )
+        }
+        return null
+    }
+
+    /**
+     * Hangs a mark [distance] metres along [bearing] from the corner at
+     * [fromIndex] — how a survey letter actually states a boundary.
+     *
+     * The origin corner is remembered on the mark, so the new corner lands after
+     * it however the arithmetic came out; measuring from the last corner
+     * continues the ring and measuring from a middle one splits its side.
+     */
+    @StringRes
+    fun placeMarkFromBearing(fromIndex: Int, bearing: String, distance: String): Int? {
+        val origin = _uiState.value.draftBoundary.getOrNull(fromIndex)?.point
+            ?: return R.string.error_corner_no_origin
+        val azimuth = BoundaryEdits.parseBearing(bearing) ?: return R.string.error_corner_bearing
+        val metres = BoundaryEdits.parseDistance(distance) ?: return R.string.error_corner_distance
+        val point = GeoUtils.destination(origin.latitude, origin.longitude, azimuth, metres)
+        cornerJob?.cancel()
+        _uiState.update {
+            it.copy(
+                pendingMark = PendingMark(point, MarkSource.BEARING, after = fromIndex),
+                markToleranceM = 0.0,
+                averagingFix = false,
+                isCapturingCorner = false,
+                cornerSamples = 0,
+                message = null
+            )
+        }
+        return null
+    }
+
+    /**
+     * Turns the hanging mark into a corner. The only way a corner is created.
+     *
+     * Appended, or slotted into the side it was placed on, or refused — and which
+     * of the three was already on screen above the button, so there is nothing to
+     * announce afterwards. The insert snackbar this replaces told the user about a
+     * renumbering that had already happened to a corner they had not agreed to.
+     */
+    fun commitMark() {
+        _uiState.update { state ->
+            val mark = state.pendingMark ?: return@update state
+            val committed = DraftCorner(newCornerId(), mark.point)
+            when (val placement = mark.placementIn(state.draftPoints, state.markToleranceM)) {
+                // Reachable only if the draft changed under the mark, since the
+                // button is disabled on this answer. Says which corner either way.
+                is Placement.TooClose -> state.copy(
+                    message = strings.get(
+                        R.string.corner_picker_too_close,
+                        placement.nearCorner.toString()
+                    )
+                )
+
+                is Placement.Append -> state.copy(
+                    draftBoundary = state.draftBoundary + committed,
+                    pendingMark = null,
+                    averagingFix = false,
+                    cornerSamples = 0
+                )
+
+                is Placement.Insert -> state.copy(
+                    draftBoundary = state.draftBoundary.toMutableList()
+                        .apply { add(placement.at, committed) },
+                    pendingMark = null,
+                    averagingFix = false,
+                    cornerSamples = 0
+                )
+            }
+        }
+    }
+
+    /** Throws the mark away and leaves the map open. */
+    fun discardMark() {
+        cornerJob?.cancel()
+        _uiState.update {
+            it.copy(
+                pendingMark = null,
+                averagingFix = false,
                 isCapturingCorner = false,
                 cornerSamples = 0
             )
@@ -806,38 +992,40 @@ class LandEditViewModel(
     }
 
     /**
-     * Turns a tap into a corner — appended, or slotted into the side it landed on.
+     * Copies whichever corners of [neighbourId] the user ticked into the draft,
+     * skipping any that duplicate a corner already there.
      *
-     * [edgeToleranceM] is a fingertip's width converted to ground distance at the
-     * current zoom, and it is the whole of the gesture: tap an outline where a
-     * corner is missing and the corner appears *there*, in sequence, instead of
-     * at the end of the ring where it would draw a spike across the parcel. A tap
-     * away from the outline still appends, which is what drawing a fresh shape
-     * needs.
+     * These land in the draft rather than as a mark, because four ticked corners
+     * cannot hang as one mark — but they land in the *draft*, drawn on the map and
+     * written to nothing until the picker is committed, which is the guarantee
+     * that matters. The skip count is said out loud: someone who ticks four and
+     * gets two has to be told which of those happened, or half their work looks
+     * like it disappeared.
      */
-    fun addDraftCornerAt(latitude: Double, longitude: Double, edgeToleranceM: Double = 0.0) {
-        val candidate = GeoPoint(latitude, longitude)
-        _uiState.update { state ->
-            val points = state.draftPoints
-            if (!CornerDraft.acceptTap(points, candidate)) {
-                state.copy(message = strings.get(R.string.msg_corner_too_close))
-            } else {
-                val at = BoundaryEdits.edgeNear(points, candidate, edgeToleranceM)
-                val corner = DraftCorner(newCornerId(), candidate)
-                if (at == null || at > state.draftBoundary.size) {
-                    state.copy(draftBoundary = state.draftBoundary + corner)
-                } else {
-                    state.copy(
-                        draftBoundary = state.draftBoundary.toMutableList()
-                            .apply { add(at, corner) },
-                        // Said out loud: a corner that quietly appeared as #3
-                        // rather than #7 is a renumbering the user has to be told
-                        // about, or the list below stops matching what they expect.
-                        message = strings.get(R.string.msg_corner_inserted, at + 1)
-                    )
-                }
+    fun appendDraftFromNeighbour(neighbourId: String, selectedIndices: Set<Int>) {
+        val state = _uiState.value
+        val land = state.neighbours.find { it.id == neighbourId } ?: return
+        val additions = selectedIndices.sorted().mapNotNull { land.corners.getOrNull(it) }
+        if (additions.isEmpty()) return
+        val existing = state.draftPoints
+        val (updated, skipped) = BoundaryEdits.appendDistinct(existing, additions)
+        // Only the tail is turned into new corners: rebuilding the whole list would
+        // hand fresh ids to corners that are already there, and an id is what a
+        // half-finished drag and the current selection are holding on to.
+        val kept = updated.drop(existing.size).map { DraftCorner(newCornerId(), it) }
+        _uiState.update { it.copy(draftBoundary = it.draftBoundary + kept) }
+        val added = additions.size - skipped
+        showMessage(
+            when {
+                added > 0 && skipped == 0 -> strings.plural(R.plurals.msg_corners_added, added)
+                added > 0 && skipped > 0 -> strings.get(
+                    R.string.msg_corners_added_some_skipped,
+                    added.toString(),
+                    skipped.toString()
+                )
+                else -> strings.get(R.string.msg_corners_all_duplicate)
             }
-        }
+        )
     }
 
     /**
@@ -907,53 +1095,6 @@ class LandEditViewModel(
                 isCapturingCorner = false,
                 cornerSamples = 0
             )
-        }
-    }
-
-    /**
-     * Adds the phone's own position to the draft — the "this corner is already
-     * right, take it" path, for when the user is in fact standing on one.
-     *
-     * Keeps [PolygonMath.isMeaningfulStep] rather than the tap rule: this point
-     * comes from GPS and is subject to the same jitter the corner-by-corner
-     * capture guards against.
-     */
-    fun captureDraftCornerFromGps() {
-        if (_uiState.value.isCapturingCorner) return
-        if (!locationProvider.isLocationEnabled()) {
-            _uiState.update { it.copy(message = strings.get(R.string.msg_location_off)) }
-            return
-        }
-        _uiState.update { it.copy(isCapturingCorner = true, message = null) }
-        cornerJob = viewModelScope.launch {
-            var best: AveragedFix? = null
-            locationProvider.captureAveraged().collect { progress ->
-                progress.fix?.let { best = it }
-                _uiState.update { it.copy(cornerSamples = progress.samples) }
-            }
-            val fix = best
-            _uiState.update { state ->
-                if (fix == null) state.copy(
-                    isCapturingCorner = false, cornerSamples = 0,
-                    message = strings.get(R.string.msg_no_fix)
-                )
-                else {
-                    val candidate = GeoPoint(fix.latitude, fix.longitude, fix.accuracy)
-                    val previous = state.draftBoundary.lastOrNull()?.point
-                    if (!PolygonMath.isMeaningfulStep(previous, candidate, fix.accuracy)) {
-                        state.copy(
-                            isCapturingCorner = false, cornerSamples = 0,
-                            message = strings.get(R.string.msg_corner_too_close)
-                        )
-                    } else {
-                        state.copy(
-                            draftBoundary = state.draftBoundary + DraftCorner(newCornerId(), candidate),
-                            isCapturingCorner = false,
-                            cornerSamples = 0
-                        )
-                    }
-                }
-            }
         }
     }
 

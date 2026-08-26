@@ -180,4 +180,90 @@ class PendingMarkTest {
 
         assertEquals(null, moved.accuracyM)
     }
+
+    // ---- a stated sequence -------------------------------------------------
+
+    @Test
+    fun `a mark measured from a corner lands after that corner`() {
+        // 10 m east of corner 1, which on this square is 10 m inside the plot and
+        // nowhere near a side. The bearing is what says where it belongs: between
+        // corner 1 and corner 2.
+        val mark = PendingMark(offset(0.0, 10.0), MarkSource.BEARING, after = 0)
+
+        assertEquals(Placement.Insert(1), mark.placementIn(square, edgeToleranceM = 0.0))
+    }
+
+    @Test
+    fun `a mark measured from the last corner continues the ring`() {
+        // Insert(4) on a four-corner ring and Append(5) are the same edit; only one
+        // of them can be described to the user, because there is no corner 6 for it
+        // to go in front of.
+        val mark = PendingMark(offset(-10.0, 0.0), MarkSource.BEARING, after = 3)
+
+        assertEquals(Placement.Append(5), mark.placementIn(square, edgeToleranceM = 0.0))
+    }
+
+    @Test
+    fun `a bearing from a corner that is no longer there falls back to the side rules`() {
+        // The origin corner can be undone while the mark still hangs on the map. The
+        // mark is still somewhere real, so it is placed by where it is rather than
+        // refused for an index that has gone.
+        val mark = PendingMark(offset(10.0, 20.0), MarkSource.BEARING, after = 9)
+
+        assertEquals(Placement.Insert(2), mark.placementIn(square, edgeToleranceM = 2.0))
+    }
+
+    @Test
+    fun `a mark on the closing side goes on the end rather than in front of nothing`() {
+        // The side from corner 4 back to corner 1. edgeNear numbers it 4, which as an
+        // insert position is the end of the list — so it is described as corner 5.
+        val mark = PendingMark(offset(10.0, 0.0), MarkSource.MAP)
+
+        assertEquals(Placement.Append(5), mark.placementIn(square, edgeToleranceM = 2.0))
+    }
+
+    // ---- moving a hanging mark --------------------------------------------
+
+    @Test
+    fun `dragging or nudging a fix makes it a map mark`() {
+        // The confirm bar quotes ± and a sample count for a GPS mark. Once the user
+        // has moved it by hand those figures describe a position that no longer
+        // exists, so the mark stops claiming to have come from the receiver.
+        val fromFix = PendingMark(GeoPoint(lat, lon, accuracyM = 3.4), MarkSource.GPS)
+
+        val nudged = fromFix.nudged(bearingDeg = 0.0, stepM = 1.0)
+        assertEquals(MarkSource.MAP, nudged.source)
+        assertEquals(null, nudged.point.accuracyM)
+
+        val dragged = fromFix.movedTo(lat + 0.001, lon)
+        assertEquals(MarkSource.MAP, dragged.source)
+        assertEquals(null, dragged.point.accuracyM)
+    }
+
+    @Test
+    fun `moving a mark keeps the corner it was measured from`() {
+        // Tapping the arrows to line a measured corner up against a fence post must
+        // not change which side of the parcel it belongs to.
+        val mark = PendingMark(offset(0.0, 10.0), MarkSource.BEARING, after = 0)
+
+        assertEquals(0, mark.nudged(bearingDeg = 0.0, stepM = 0.5).after)
+        assertEquals(0, mark.movedTo(lat, lon).after)
+    }
+
+    @Test
+    fun `a nudge that cannot move the mark leaves the mark itself untouched`() {
+        val mark = PendingMark(GeoPoint(lat, lon), MarkSource.GPS)
+
+        // Same instance, so a stuck arrow button cannot silently turn a GPS mark
+        // into a hand-placed one.
+        assertSame(mark, mark.nudged(bearingDeg = 0.0, stepM = 0.0))
+    }
+
+    @Test
+    fun `the offered steps run from a stride down to a hand's width`() {
+        // Coarsest first, because that is the order they are drawn in, and the
+        // default has to be one of them or the chooser opens with nothing selected.
+        assertEquals(listOf(5.0, 1.0, 0.5, 0.1), PendingMark.STEPS_M)
+        assertTrue(PendingMark.DEFAULT_STEP_M in PendingMark.STEPS_M)
+    }
 }

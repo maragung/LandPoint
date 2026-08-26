@@ -37,6 +37,7 @@ import com.landpoint.app.ui.components.MapStyleAction
 import com.landpoint.app.ui.components.MapTap
 import com.landpoint.app.ui.components.MapTopChrome
 import com.landpoint.app.ui.components.TelemetryPanel
+import com.landpoint.app.ui.components.TelemetrySheet
 import com.landpoint.app.ui.components.rememberLandMapController
 import com.landpoint.app.ui.components.rememberLocationPermission
 import com.landpoint.app.ui.components.rememberMapPrefs
@@ -162,9 +163,10 @@ fun MapScreen(
             }
         )
 
-        // The readout sits above the scale bar rather than anywhere of its own: both
+        // The chip sits above the scale bar rather than anywhere of its own: both
         // answer "how big is what I am looking at", and the map's own corners are
-        // already spoken for by the chrome.
+        // already spoken for by the chrome. It stays one line either way — the full
+        // readout opens as a sheet, so nothing here grows over the ground.
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -174,8 +176,7 @@ fun MapScreen(
             if (permission.isGranted) {
                 TelemetryPanel(
                     state = state.tracking,
-                    expanded = readoutOpen,
-                    onExpandedChange = { readoutOpen = it }
+                    onShowDetail = { readoutOpen = true }
                 )
             } else {
                 LocationAccessChip(
@@ -194,6 +195,13 @@ fun MapScreen(
                 .align(Alignment.BottomEnd)
                 .padding(horizontal = 8.dp, vertical = 6.dp)
         )
+
+        if (readoutOpen) {
+            TelemetrySheet(
+                state = state.tracking,
+                onDismiss = { readoutOpen = false }
+            )
+        }
 
         if (prefs.sheetVisible) {
             BasemapSheet(

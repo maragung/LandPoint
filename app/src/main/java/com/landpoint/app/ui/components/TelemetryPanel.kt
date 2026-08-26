@@ -1,22 +1,24 @@
 package com.landpoint.app.ui.components
 
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +50,9 @@ private const val CHROME_ALPHA = 0.92f
 /** Wide enough for "Mobile network or Wi-Fi" on a narrow phone, no wider. */
 private val PANEL_MAX_WIDTH = 280.dp
 
+/** The gutter Material sheets use in this app, so this one lines up with the others. */
+private val SHEET_PADDING = 24.dp
+
 /** Metres per second to kilometres per hour. */
 private const val KMH_PER_MPS = 3.6
 
@@ -66,33 +71,27 @@ private val ICON_SIZE = 18.dp
  * satellites heard faintly explains a wandering dot; nine at 40 dB-Hz says the dot
  * is as good as this phone gets and the corner can be marked.
  *
- * Collapsed to a single chip by default. Expanded it covers a third of a phone
- * screen, which is a third of the ground the user came here to look at, so it opens
- * on a tap and stays open only as long as it is wanted.
- *
- * Nothing here is computed from anything else: every row is a figure Android
- * reported, and a row the fix did not carry says so instead of showing a nought.
- * The two exceptions are labelled as what they are — the heading can come from the
- * compass, and the movement row is the app's own reading of the accelerometer.
+ * One line, always: accuracy and the sky it came from. The dozen other figures
+ * are a tap away in [TelemetrySheet] rather than in a card that unfolds here,
+ * because this sits *on the map* — expanded in place it covered a third of the
+ * ground the user opened the map to look at, and it covered it at the moment they
+ * were deciding whether to trust the dot underneath.
  */
 @Composable
 fun TelemetryPanel(
     state: TrackingState,
-    expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit,
+    onShowDetail: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
-        onClick = { onExpandedChange(!expanded) },
-        modifier = modifier
-            .widthIn(max = PANEL_MAX_WIDTH)
-            .animateContentSize(),
+        onClick = onShowDetail,
+        modifier = modifier.widthIn(max = PANEL_MAX_WIDTH),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface.copy(alpha = CHROME_ALPHA),
         contentColor = MaterialTheme.colorScheme.onSurface,
         shadowElevation = 2.dp
     ) {
-        if (expanded) ExpandedReadout(state) else CollapsedReadout(state)
+        CollapsedReadout(state)
     }
 }
 
@@ -197,61 +196,92 @@ private fun CollapsedReadout(state: TrackingState) {
     }
 }
 
+/**
+ * Everything the receiver is reporting, on a sheet over the map.
+ *
+ * A sheet rather than a panel that unfolds where the chip is, for the reason the
+ * chip's own documentation gives: twelve rows is a third of a phone screen, and on
+ * this screen that third is ground. A sheet is also the app's existing answer to
+ * "more than a chip's worth of detail" — the style chooser is one — so it dismisses
+ * the way the user has already learnt: swipe it down, tap the map behind it, or
+ * press back. No close button is drawn, because all three of those work and a
+ * fourth affordance would be the only one that needs finding.
+ *
+ * Nothing here is computed from anything else: every row is a figure Android
+ * reported, and a row the fix did not carry says so instead of showing a nought.
+ * The two exceptions are labelled as what they are — the heading can come from the
+ * compass, and the movement row is the app's own reading of the accelerometer.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ExpandedReadout(state: TrackingState) {
-    val fix = state.fix
-    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+fun TelemetrySheet(
+    state: TrackingState,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = SHEET_PADDING, vertical = 8.dp)
+                .padding(bottom = 12.dp)
         ) {
-            SignalDot(state.satellites.strength)
-            Text(
-                text = stringResource(R.string.telemetry_title),
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.weight(1f)
-            )
-            Icon(
-                imageVector = Icons.Default.ExpandLess,
-                contentDescription = stringResource(R.string.telemetry_hide),
-                modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SignalDot(state.satellites.strength)
+                Text(
+                    text = stringResource(R.string.telemetry_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            ReadoutRows(state)
         }
-
-        if (fix == null) {
-            Text(
-                text = stringResource(R.string.telemetry_waiting),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp)
-            )
-        } else {
-            Readout(R.string.telemetry_latitude, coordinate(fix.latitude))
-            Readout(R.string.telemetry_longitude, coordinate(fix.longitude))
-            Readout(R.string.telemetry_accuracy, accuracyText(fix))
-            Readout(R.string.telemetry_altitude, altitudeText(fix))
-            Readout(R.string.telemetry_speed, speedText(fix))
-        }
-
-        Readout(R.string.telemetry_heading, headingText(state))
-
-        if (fix != null) {
-            Readout(R.string.telemetry_source, stringResource(fix.source.labelRes()))
-        }
-
-        Readout(R.string.telemetry_satellites, satellitesText(state))
-        Readout(R.string.telemetry_signal, signalText(state))
-        Readout(
-            R.string.telemetry_motion,
-            stringResource(
-                if (state.moving) R.string.telemetry_value_moving else R.string.telemetry_value_still
-            )
-        )
-
-        if (fix != null) Readout(R.string.telemetry_updated, timeText(fix.timestamp))
     }
+}
+
+/**
+ * The rows themselves, in the order a doubt is usually resolved: where, how well,
+ * then why.
+ */
+@Composable
+private fun ColumnScope.ReadoutRows(state: TrackingState) {
+    val fix = state.fix
+    if (fix == null) {
+        Text(
+            text = stringResource(R.string.telemetry_waiting),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp)
+        )
+    } else {
+        Readout(R.string.telemetry_latitude, coordinate(fix.latitude))
+        Readout(R.string.telemetry_longitude, coordinate(fix.longitude))
+        Readout(R.string.telemetry_accuracy, accuracyText(fix))
+        Readout(R.string.telemetry_altitude, altitudeText(fix))
+        Readout(R.string.telemetry_speed, speedText(fix))
+    }
+
+    Readout(R.string.telemetry_heading, headingText(state))
+
+    if (fix != null) {
+        Readout(R.string.telemetry_source, stringResource(fix.source.labelRes()))
+    }
+
+    Readout(R.string.telemetry_satellites, satellitesText(state))
+    Readout(R.string.telemetry_signal, signalText(state))
+    Readout(
+        R.string.telemetry_motion,
+        stringResource(
+            if (state.moving) R.string.telemetry_value_moving else R.string.telemetry_value_still
+        )
+    )
+
+    if (fix != null) Readout(R.string.telemetry_updated, timeText(fix.timestamp))
 }
 
 /** One label and its figure, on a line. */

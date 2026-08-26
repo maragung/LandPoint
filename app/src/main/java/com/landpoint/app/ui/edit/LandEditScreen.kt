@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -33,12 +32,8 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.outlined.AddLocationAlt
-import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.EditLocationAlt
-import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -173,12 +168,22 @@ fun LandEditScreen(
         CornerPickerScreen(
             state = state,
             currentLocation = currentLocation,
-            onTapCorner = viewModel::addDraftCornerAt,
             onMessageShown = viewModel::consumeMessage,
+            onHintShown = viewModel::dismissCornerHint,
+            onPlaceMark = viewModel::placeMarkAt,
+            onMoveMark = viewModel::moveMark,
+            onNudgeMark = viewModel::nudgeMark,
+            onMarkStep = viewModel::setMarkStep,
+            onMarkFromFix = { withLocation(viewModel::markFromFix) },
+            onMarkTyped = viewModel::placeMarkTyped,
+            onMarkFromBearing = viewModel::placeMarkFromBearing,
+            onUseMark = viewModel::commitMark,
+            onDiscardMark = viewModel::discardMark,
+            onLoadNeighbours = viewModel::loadNeighbours,
+            onTakeFromNeighbour = viewModel::appendDraftFromNeighbour,
             onMoveCorner = viewModel::moveDraftCorner,
             onSelectCorner = viewModel::selectDraftCorner,
             onDeleteSelected = viewModel::removeSelectedDraftCorner,
-            onUseGps = { withLocation(viewModel::captureDraftCornerFromGps) },
             onUndo = viewModel::undoDraftCorner,
             onClear = viewModel::clearDraftCorners,
             onDone = viewModel::commitCornerPicker,
@@ -266,7 +271,7 @@ fun LandEditScreen(
             FormSection {
                 BoundarySection(
                     state = state,
-                    onAddCorner = { withLocation(viewModel::addBoundaryPoint) },
+                    onMarkAtFix = { withLocation(viewModel::openCornerPickerAtFix) },
                     onPickOnMap = viewModel::openCornerPicker,
                     onUndo = viewModel::undoBoundaryPoint,
                     onClear = viewModel::clearBoundary,
@@ -280,15 +285,10 @@ fun LandEditScreen(
                         }
                     },
                     onStopWalk = viewModel::stopWalk,
-                    onAddManual = viewModel::addBoundaryPointManual,
                     onUpdateCorner = viewModel::updateBoundaryPoint,
-                    onInsertCorner = viewModel::insertBoundaryPointManual,
-                    onAddFromBearing = viewModel::insertBoundaryPointFromBearing,
                     onRemoveCorner = viewModel::removeBoundaryPoint,
                     onMoveCornerUp = viewModel::moveBoundaryPointUp,
-                    onMoveCornerDown = viewModel::moveBoundaryPointDown,
-                    onLoadNeighbours = viewModel::loadNeighbours,
-                    onTakeFromNeighbour = viewModel::appendFromNeighbour
+                    onMoveCornerDown = viewModel::moveBoundaryPointDown
                 )
             }
 
@@ -526,33 +526,35 @@ private fun QualityChip(quality: FixQuality) {
  * Corner-by-corner boundary capture, with walking the boundary as the fallback
  * where the corners cannot be stood on. Area only appears once the shape
  * actually closes — showing a number for two corners would be meaningless.
+ *
+ * Two buttons add a corner now, where there were five, and both of them open the
+ * map: one lands the camera on the phone's own position with a mark already being
+ * averaged there, the other opens on whatever has been drawn so far. Typed
+ * coordinates, a bearing off the last corner and corners copied from next door all
+ * still exist — inside the picker, where the user sees the spot before agreeing to
+ * it. What is left here is *correcting* corners that already stand, which is a
+ * different job: it starts from a number in a list, not from a place on the ground.
  */
 @Composable
 private fun BoundarySection(
     state: LandEditUiState,
-    onAddCorner: () -> Unit,
+    onMarkAtFix: () -> Unit,
     onPickOnMap: () -> Unit,
     onUndo: () -> Unit,
     onClear: () -> Unit,
     onStartWalk: () -> Unit,
     onStopWalk: () -> Unit,
-    onAddManual: (String, String) -> Int?,
     onUpdateCorner: (Int, String, String) -> Int?,
-    onInsertCorner: (Int, String, String) -> Int?,
-    onAddFromBearing: (Int, String, String) -> Int?,
     onRemoveCorner: (Int) -> Unit,
     onMoveCornerUp: (Int) -> Unit,
-    onMoveCornerDown: (Int) -> Unit,
-    onLoadNeighbours: () -> Unit,
-    onTakeFromNeighbour: (String, Set<Int>) -> Unit
+    onMoveCornerDown: (Int) -> Unit
 ) {
     val areaUnit = state.areaUnit
     // While a walk records, every other boundary control edits a shape that is
     // being rewritten underneath it. Freeze them rather than race the track.
     val busy = state.isCapturingCorner || state.isWalking
 
-    var dialogTarget by remember { mutableStateOf<CornerDialogTarget?>(null) }
-    var neighbourSheet by remember { mutableStateOf(false) }
+    var editingCorner by remember { mutableStateOf<Int?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.boundary_title), style = MaterialTheme.typography.titleSmall)
@@ -566,7 +568,7 @@ private fun BoundarySection(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            FilledTonalButton(onClick = onAddCorner, enabled = !busy) {
+            FilledTonalButton(onClick = onMarkAtFix, enabled = !busy) {
                 if (state.isCapturingCorner) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 } else {
@@ -609,70 +611,6 @@ private fun BoundarySection(
             )
         }
 
-        // The path that needs no GPS and no map at all: corners copied off a
-        // survey letter or a certificate, which is how most of these boundaries
-        // are already written down.
-        OutlinedButton(
-            onClick = {
-                dialogTarget = CornerDialogTarget.Append
-            },
-            enabled = !busy
-        ) {
-            Icon(
-                Icons.Outlined.EditLocationAlt,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Text(
-                "  " + stringResource(R.string.boundary_add_manual),
-                style = MaterialTheme.typography.labelLarge
-            )
-        }
-
-        // The same letters that print coordinates for one corner give every other
-        // side as a bearing and a length from the one before it. Needs a corner to
-        // measure from, so it appears once there is one.
-        if (state.boundary.isNotEmpty()) {
-            OutlinedButton(
-                onClick = {
-                    dialogTarget = CornerDialogTarget.Bearing(state.boundary.lastIndex)
-                },
-                enabled = !busy
-            ) {
-                Icon(
-                    Icons.Outlined.Explore,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    "  " + stringResource(R.string.boundary_add_bearing),
-                    style = MaterialTheme.typography.labelLarge
-                )
-            }
-        }
-
-        // Where two parcels meet, the corners between them are the same pegs in
-        // the ground. Measuring them twice puts a sliver of no-man's land or an
-        // overlap between the two records, and it is the overlap that turns into
-        // an argument years later.
-        OutlinedButton(
-            onClick = {
-                onLoadNeighbours()
-                neighbourSheet = true
-            },
-            enabled = !busy
-        ) {
-            Icon(
-                Icons.Outlined.ContentCopy,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Text(
-                "  " + stringResource(R.string.boundary_from_neighbour),
-                style = MaterialTheme.typography.labelLarge
-            )
-        }
-
         WalkControls(state = state, onStartWalk = onStartWalk, onStopWalk = onStopWalk)
 
         if (state.boundary.isNotEmpty()) {
@@ -690,11 +628,7 @@ private fun BoundarySection(
             CornerList(
                 boundary = state.boundary,
                 enabled = !busy,
-                onEdit = { index -> dialogTarget = CornerDialogTarget.Edit(index) },
-                // After corner #n means position n+1 in the ring, which is also
-                // the number the new corner will carry.
-                onInsertAfter = { index -> dialogTarget = CornerDialogTarget.Insert(index + 1) },
-                onMeasureFrom = { index -> dialogTarget = CornerDialogTarget.Bearing(index) },
+                onEdit = { index -> editingCorner = index },
                 onRemove = onRemoveCorner,
                 onMoveUp = onMoveCornerUp,
                 onMoveDown = onMoveCornerDown
@@ -761,100 +695,34 @@ private fun BoundarySection(
         }
     }
 
-    if (neighbourSheet) {
-        NeighbourSheet(
-            state = state,
-            onDismiss = { neighbourSheet = false },
-            onTake = onTakeFromNeighbour
-        )
-    }
-
-    when (val target = dialogTarget) {
-        null -> Unit
-
-        is CornerDialogTarget.Coordinates -> CornerCoordinateDialog(
-            number = when (target) {
-                CornerDialogTarget.Append -> null
-                is CornerDialogTarget.Edit -> target.index + 1
-                is CornerDialogTarget.Insert -> target.index + 1
-            },
-            inserting = target is CornerDialogTarget.Insert,
-            initial = when (target) {
-                CornerDialogTarget.Append -> null
-                is CornerDialogTarget.Edit -> state.boundary.getOrNull(target.index)
-                // Half way along the side it is being slotted into: a corner
-                // between two others is nearly always on the line between them,
-                // so this is usually a nudge rather than a fresh reading.
-                is CornerDialogTarget.Insert ->
-                    BoundaryEdits.edgeMidpoint(state.boundary, target.index - 1)?.rounded()
-            },
-            onDismiss = { dialogTarget = null },
-            onConfirm = { lat, lon ->
-                val refusal = when (target) {
-                    CornerDialogTarget.Append -> onAddManual(lat, lon)
-                    is CornerDialogTarget.Edit -> onUpdateCorner(target.index, lat, lon)
-                    is CornerDialogTarget.Insert -> onInsertCorner(target.index, lat, lon)
+    // The only corner dialog left on the form, and it creates nothing: it corrects
+    // a corner that already stands, which starts from a number in a list rather
+    // than from a place on the ground. Every path that *makes* a corner — typed
+    // coordinates, a bearing off the corner before, corners copied from next door —
+    // now runs inside the picker, where the spot is on the map before it is agreed
+    // to. Getting a corner into the middle of the ring is a mark dropped on that
+    // side, and the confirm bar says "Insert between 2 and 3" before the button.
+    editingCorner?.let { index ->
+        val corner = state.boundary.getOrNull(index)
+        // Clear, or a walk rewriting the ring, can take the corner away from under
+        // an open dialog. It is dropped rather than left stale, or the dialog would
+        // spring back the moment the ring grew to that length again.
+        LaunchedEffect(corner == null) { if (corner == null) editingCorner = null }
+        if (corner != null) {
+            CornerCoordinateDialog(
+                number = index + 1,
+                inserting = false,
+                initial = corner,
+                onDismiss = { editingCorner = null },
+                onConfirm = { lat, lon ->
+                    val refusal = onUpdateCorner(index, lat, lon)
+                    if (refusal == null) editingCorner = null
+                    refusal
                 }
-                if (refusal == null) dialogTarget = null
-                refusal
-            }
-        )
-
-        is CornerDialogTarget.Bearing -> {
-            val origin = state.boundary.getOrNull(target.fromIndex)
-            // Clear, or a walk rewriting the ring, can take the corner away from
-            // under an open dialog. The target is dropped rather than left stale,
-            // or the dialog would spring back the moment the ring grew to that
-            // length again.
-            LaunchedEffect(origin == null) { if (origin == null) dialogTarget = null }
-            if (origin != null) {
-                CornerBearingDialog(
-                    fromNumber = target.fromIndex + 1,
-                    newNumber = target.fromIndex + 2,
-                    origin = origin,
-                    onDismiss = { dialogTarget = null },
-                    onConfirm = { bearing, distance ->
-                        val refusal = onAddFromBearing(target.fromIndex, bearing, distance)
-                        if (refusal == null) dialogTarget = null
-                        refusal
-                    }
-                )
-            }
+            )
         }
     }
 }
-
-/** What a corner dialog was opened for. */
-private sealed interface CornerDialogTarget {
-
-    /** The three that are typed as a pair of coordinates, and share one dialog. */
-    sealed interface Coordinates : CornerDialogTarget
-
-    /** Onto the end of the ring. */
-    data object Append : Coordinates
-
-    /** Correcting the corner already at [index]. */
-    data class Edit(val index: Int) : Coordinates
-
-    /** A new corner landing at [index], between two that already exist. */
-    data class Insert(val index: Int) : Coordinates
-
-    /** A new corner stated as a bearing and a length from the one at [fromIndex]. */
-    data class Bearing(val fromIndex: Int) : CornerDialogTarget
-}
-
-/**
- * Trims a computed midpoint to a length that reads as a coordinate.
- *
- * Averaging two coordinates leaves float noise — `-6.914543999999999` — and that
- * is what the user would be shown as the suggested corner. Seven decimals is
- * about a centimetre, far finer than any of these corners were measured to, so
- * nothing real is lost by not showing the rest.
- */
-private fun GeoPoint.rounded(): GeoPoint = GeoPoint(
-    latitude = "%.7f".format(java.util.Locale.US, latitude).toDouble(),
-    longitude = "%.7f".format(java.util.Locale.US, longitude).toDouble()
-)
 
 /**
  * Metres to one decimal, at any length.
@@ -893,8 +761,6 @@ private fun CornerList(
     boundary: List<GeoPoint>,
     enabled: Boolean,
     onEdit: (Int) -> Unit,
-    onInsertAfter: (Int) -> Unit,
-    onMeasureFrom: (Int) -> Unit,
     onRemove: (Int) -> Unit,
     onMoveUp: (Int) -> Unit,
     onMoveDown: (Int) -> Unit
@@ -1005,19 +871,10 @@ private fun CornerList(
     sheetFor?.takeIf { it in boundary.indices }?.let { index ->
         CornerActionsSheet(
             number = index + 1,
-            canInsert = boundary.size >= 2,
             onDismiss = { sheetFor = null },
             onEdit = {
                 sheetFor = null
                 onEdit(index)
-            },
-            onInsertAfter = {
-                sheetFor = null
-                onInsertAfter(index)
-            },
-            onMeasureFrom = {
-                sheetFor = null
-                onMeasureFrom(index)
             },
             onRemove = {
                 sheetFor = null
@@ -1052,11 +909,8 @@ private fun CornerAction(
 @Composable
 private fun CornerActionsSheet(
     number: Int,
-    canInsert: Boolean,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
-    onInsertAfter: () -> Unit,
-    onMeasureFrom: () -> Unit,
     onRemove: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -1075,20 +929,6 @@ private fun CornerActionsSheet(
                 icon = Icons.Outlined.Edit,
                 label = stringResource(R.string.corner_sheet_edit),
                 onClick = onEdit
-            )
-            // Needs a side to sit in the middle of, so it appears from the second
-            // corner onwards. Appending is what the button above the list is for.
-            if (canInsert) {
-                SheetAction(
-                    icon = Icons.Outlined.AddLocationAlt,
-                    label = stringResource(R.string.corner_sheet_insert, number + 1),
-                    onClick = onInsertAfter
-                )
-            }
-            SheetAction(
-                icon = Icons.Outlined.Explore,
-                label = stringResource(R.string.corner_sheet_bearing),
-                onClick = onMeasureFrom
             )
             SheetAction(
                 icon = Icons.Outlined.Delete,
@@ -1140,7 +980,7 @@ private fun SheetAction(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NeighbourSheet(
+internal fun NeighbourSheet(
     state: LandEditUiState,
     onDismiss: () -> Unit,
     onTake: (String, Set<Int>) -> Unit
@@ -1359,7 +1199,7 @@ private fun NeighbourCornerRow(
  * dialog would sit on top of, with the typed text left where it is.
  */
 @Composable
-private fun CornerCoordinateDialog(
+internal fun CornerCoordinateDialog(
     number: Int?,
     inserting: Boolean,
     initial: GeoPoint?,
@@ -1442,7 +1282,7 @@ private fun CornerCoordinateDialog(
  * sides have been measured from it.
  */
 @Composable
-private fun CornerBearingDialog(
+internal fun CornerBearingDialog(
     fromNumber: Int,
     newNumber: Int,
     origin: GeoPoint,

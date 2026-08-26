@@ -9,6 +9,7 @@
     <!-- Common actions -->
     <string name="action_save">Save</string>
     <string name="action_cancel">Cancel</string>
+    <string name="action_close">Close</string>
     <string name="action_delete">Delete</string>
     <string name="action_back">Back</string>
     <string name="action_edit">Edit</string>
@@ -137,7 +138,7 @@
 
     <!-- Boundary -->
     <string name="boundary_title">Boundary</string>
-    <string name="boundary_hint">Stand at each corner and tap Add corner. Three or more corners give an area.</string>
+    <string name="boundary_hint">Every corner is placed on the map first. Stand at one and tap Add corner, or mark it by hand. Three or more corners give an area.</string>
     <string name="boundary_add">Add corner</string>
     <string name="boundary_capturing">Measuring corner…</string>
     <string name="boundary_undo">Undo</string>
@@ -152,8 +153,7 @@
         <item quantity="one">%1$d corner</item>
         <item quantity="other">%1$d corners</item>
     </plurals>
-    <string name="msg_corner_too_close">That is the same spot as the last corner</string>
-    <string name="msg_corner_inserted">Added as corner %1$d, on the side you tapped</string>
+    <string name="msg_mark_pending">Use the mark or discard it first</string>
     <plurals name="msg_corners_added">
         <item quantity="one">%1$d corner taken from the neighbour</item>
         <item quantity="other">%1$d corners taken from the neighbour</item>
@@ -162,17 +162,32 @@
     <string name="msg_corners_all_duplicate">Those corners are already on this boundary</string>
 
     <!-- Map corner picker -->
-    <string name="boundary_pick_on_map">Pick on map</string>
+    <string name="boundary_pick_on_map">Mark on the map</string>
     <string name="boundary_pin_centroid">Land pin: %1$s</string>
     <string name="corner_picker_title">Mark the corners</string>
-    <string name="corner_picker_tap_hint">Tap the map to place a corner, or tap a line to add one between the two corners it joins. Drag a corner to move it.</string>
+    <string name="corner_picker_tap_hint">Line the crosshair up on the corner, then tap Place a mark here. The mark can still be dragged or nudged before you use it.</string>
     <string name="corner_picker_online_map">The background comes from the internet. With no signal it stays blank — corners, area and your position still work.</string>
-    <string name="corner_picker_use_gps">Use my position</string>
     <string name="corner_picker_done">Use this boundary</string>
-    <string name="corner_picker_cancel">Cancel</string>
+    <string name="corner_picker_place_mark">Place a mark here</string>
+    <string name="corner_picker_use_mark">Use this mark</string>
+    <string name="corner_picker_discard_mark">Discard mark</string>
+    <string name="corner_picker_nudge_step">Nudge step</string>
+    <string name="corner_picker_step_value">%1$s m</string>
+    <string name="corner_picker_nudge_north">Nudge north</string>
+    <string name="corner_picker_nudge_east">Nudge east</string>
+    <string name="corner_picker_nudge_south">Nudge south</string>
+    <string name="corner_picker_nudge_west">Nudge west</string>
+    <string name="corner_picker_from_fix">Move to my position</string>
+    <string name="corner_picker_averaging">Averaging the fix…</string>
+    <string name="corner_picker_by_numbers">Enter coordinates</string>
+    <string name="corner_picker_by_bearing">Distance and bearing</string>
+    <string name="corner_picker_will_append">Corner %1$s</string>
+    <string name="corner_picker_will_insert">Insert between %1$s and %2$s</string>
+    <string name="corner_picker_too_close">Too close to corner %1$s</string>
+    <string name="corner_picker_about_accuracy">About the map and accuracy</string>
+    <string name="corner_picker_mark_a11y">Mark at %1$s</string>
 
     <!-- Editing individual corners -->
-    <string name="boundary_add_manual">Add from coordinates</string>
     <string name="boundary_corners_title">Corner coordinates</string>
     <string name="boundary_corner_number">#%1$d  %2$s</string>
     <string name="boundary_side_next">→ #%1$d  %2$s m  %3$s° %4$s</string>
@@ -186,14 +201,12 @@
     <string name="corner_dialog_title_edit">Corner %1$d</string>
     <string name="corner_dialog_title_insert">New corner %1$d</string>
     <string name="boundary_self_crossing">Sides %1$d and %2$d cross each other, so the outline is not a single enclosed shape and the area below is not the ground it covers. Usually one corner is out of sequence — move it earlier or later.</string>
-    <string name="boundary_add_bearing">Add from bearing</string>
     <string name="boundary_from_neighbour">Take corners from a neighbour</string>
     <string name="corner_dialog_title_bearing">Corner %1$d, measured from corner %2$d</string>
     <string name="corner_dialog_bearing">Bearing (° from north)</string>
     <string name="corner_dialog_distance">Length of the side (m)</string>
     <string name="corner_dialog_bearing_hint">As the survey letter states it: degrees clockwise from north, then how long that side is. 45, 45.5 and 45°30\'20\" are all read the same way.</string>
     <string name="corner_dialog_bearing_result">Lands on %1$s</string>
-    <string name="corner_sheet_bearing">Measure the next corner from here</string>
     <string name="error_corner_bearing">Enter a bearing between 0 and 360 degrees</string>
     <string name="error_corner_distance">Enter how long the side is, in metres</string>
     <string name="error_corner_no_origin">That corner is no longer there to measure from</string>
@@ -214,7 +227,7 @@
         <item quantity="one">Add %1$d corner</item>
         <item quantity="other">Add %1$d corners</item>
     </plurals>
-    <string name="corner_picker_select_hint">Tap a corner to select it.</string>
+    <string name="corner_picker_select_hint">Tap a corner to select it, then use the delete button. Drag a corner to move it.</string>
     <string name="corner_picker_delete_selected">Delete corner %1$d</string>
 
     <!-- Boundary preview -->
@@ -316,7 +329,7 @@
     <string name="shape_a11y_map">Map of the boundary: %1$s, area %2$s. The record lists every corner as coordinates.</string>
     <string name="shape_a11y_map_no_area">Map of the boundary: %1$s, too few for an area.</string>
     <string name="shape_a11y_map_point">Map. This land has no boundary saved, only its position.</string>
-    <string name="picker_a11y_map">Map for marking corners, %1$s so far. A tap puts a corner where the finger lands on the map. To give coordinates as numbers instead, go back and use %2$s.</string>
+    <string name="picker_a11y_map">Map for marking corners, %1$s so far. The map need not be touched at all: place a mark at the centre, move it with the four nudge buttons, and use it when the reading is right. Coordinates can also be typed in as numbers.</string>
     <string name="detail_a11y_map">Map of the boundary, %1$s. Opens the full map.</string>
     <string name="detail_a11y_map_point">Map of where this land is. Opens the full map.</string>
 
@@ -478,7 +491,6 @@
     <string name="pdf_sketch_label">Sketch</string>
     <string name="pdf_sketch_scale">%1$s m</string>
 
-
     <!-- Privacy and security -->
     <string name="settings_section_privacy">Privacy and security</string>
     <string name="settings_privacy_no_cloud">Land records and photos stay on this phone. They are not copied into Google cloud backup, and they do not travel through Android\'s device-to-device transfer either — use Backup below both to keep a copy you control and to move to a new phone.</string>
@@ -519,16 +531,15 @@
     <string name="corner_sheet_title">Corner %1$d</string>
     <string name="corner_sheet_edit">Change coordinates</string>
     <string name="corner_sheet_delete">Delete this corner</string>
-    <string name="corner_sheet_insert">Insert a corner as %1$d</string>
     <!-- Map styles: what the tiles under a boundary are drawn from. -->
     <string name="map_style">Map style</string>
     <string name="map_style_note">Aerial imagery shows the ground as a camera saw it on one day. Use it to recognise the place — never as evidence of where a boundary runs.</string>
     <string name="basemap_street">Street map</string>
     <string name="basemap_street_summary">Roads, place names and buildings. Needs a connection.</string>
     <string name="basemap_satellite">Satellite</string>
-    <string name="basemap_satellite_summary">Aerial photographs — fields, roofs and trees as they are. Sharpest over towns; closer than the imagery goes it is simply enlarged. Needs a connection.</string>
+    <string name="basemap_satellite_summary">Aerial photographs — fields, roofs and trees as they are. Sharpest over towns; closer in than the photographs go they are simply enlarged, so the scale bar still reaches 2 m. Needs a connection.</string>
     <string name="basemap_terrain">Terrain</string>
-    <string name="basemap_terrain_summary">Contour lines and hill shading, for sloping ground. Needs a connection.</string>
+    <string name="basemap_terrain_summary">Contour lines and hill shading, for sloping ground. Closer in than the contours are drawn they are enlarged and go soft, but the scale bar still reaches 10 m. Needs a connection.</string>
     <string name="basemap_imported">Offline map</string>
     <string name="basemap_imported_summary">The map file stored on this phone. Works with no signal.</string>
     <string name="basemap_imported_missing">Import a .pmtiles file in Settings to use this.</string>
@@ -543,13 +554,10 @@
     <string name="map_fit">Fit everything on screen</string>
     <string name="map_attribution_esri">Imagery © Esri, Maxar, Earthstar Geographics</string>
     <string name="map_attribution_topo">© OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)</string>
-    <string name="corner_picker_show_controls">Show the corner tools</string>
-    <string name="corner_picker_hide_controls">Hide the corner tools, show more map</string>
     <!-- Live position readout over the map: what the receiver is reporting right
          now, and how much of it to believe. Every figure comes from Android
          unchanged, so "not reported" is said rather than a nought printed. -->
     <string name="telemetry_show">Show the position readout</string>
-    <string name="telemetry_hide">Hide the position readout</string>
     <string name="telemetry_title">Your position</string>
     <string name="telemetry_waiting">Looking for your position…</string>
     <string name="telemetry_waiting_short">No position yet</string>

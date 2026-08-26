@@ -41,11 +41,19 @@ or gallery.
 name, date or distance, and see how far each one is from where you are standing.
 
 **Measure** — a plot is more than one point, so record its corners and get the
-shape. Stand on each corner and let the GPS average a fix, tap them out on the
-map, walk the boundary and let it record as you go, or type coordinates straight
-off a survey letter. Corners can be reordered, corrected and deleted one at a
-time — the order is the outline — and once three are in, the area and perimeter
-are worked out and the plot's pin moves to its centroid.
+shape. Every corner is placed on a full-screen map before it is kept: take it from
+an averaged GPS fix, drop it under the crosshair, type coordinates off a survey
+letter, measure a distance and bearing from the corner before it, or copy corners
+from a neighbouring plot. Whichever way it arrives it lands as a *mark*, not a
+corner — drag it with a finger, step it a metre or a tenth of a metre at a time
+with the arrow pad, and the map tells you what it will become ("Corner 4", or
+"Insert between 2 and 3") before you accept it. Nothing joins the outline until
+you say so. Corners can then be reordered, corrected and deleted one at a time —
+the order is the outline — and once three are in, the area and perimeter are
+worked out and the plot's pin moves to its centroid.
+
+Walking the boundary is the exception, and deliberately so: that is a recording
+session rather than one corner, and it keeps its own start and stop.
 
 **Map** — every saved location as a marker, with mapped plots drawn as filled
 shapes. Maps fill the screen: no app bar, no bottom bar, just the ground and a
@@ -54,9 +62,10 @@ everything back on screen, and change the map style. Tap a marker or a plot to
 open the record; open a record's boundary full screen to see its numbered
 corners, area and perimeter. Rotating the phone keeps the camera where you left
 it. Tiles you have already viewed stay cached, so a map you loaded at home still
-works in a field with no signal. Every style zooms in far enough to place a corner
-by eye; where aerial coverage runs out the imagery is simply enlarged, because a
-coarse picture of the right ground is worth more than a refusal to go closer.
+works in a field with no signal. Every style — Terrain included — zooms in far
+enough to read a **10 m scale bar**, and the drawn styles reach 2 m; where aerial
+coverage or contour detail runs out the tiles are simply enlarged, because a coarse
+picture of the right ground is worth more than a refusal to go closer.
 
 **Where you are, in full** — a panel on the map reads out latitude, longitude,
 accuracy in metres, altitude, speed, bearing, the time of the fix, which receiver
@@ -72,8 +81,8 @@ at full rate in a pocket.
 | Style | What it shows | Source |
 | --- | --- | --- |
 | Street | Roads, names, buildings, drawn from vector tiles so the labels stay sharp at any zoom. The default, and the lightest on data. | OpenFreeMap Liberty, from OpenStreetMap data |
-| Satellite | The ground itself — roofs, trees, field edges — so a corner can be checked against something you can see. Full detail to about a 20 m scale bar over towns and 50 m elsewhere; closer than that the last photograph is enlarged rather than replaced by a placeholder. | Esri World Imagery (Esri, Maxar, Earthstar Geographics) |
-| Terrain | Contours and hill shading, for sloping or terraced land. | OpenTopoMap (CC-BY-SA) |
+| Satellite | The ground itself — roofs, trees, field edges — so a corner can be checked against something you can see. Photographic detail runs to about a 20 m scale bar over towns and 50 m elsewhere, and the camera keeps going past that to a 2 m bar with the last photograph enlarged rather than replaced by a placeholder. | Esri World Imagery (Esri, Maxar, Earthstar Geographics) |
+| Terrain | Contours and hill shading, for sloping or terraced land. Contour detail stops at about a 50 m scale bar, but the camera now goes on to 10 m with the lines enlarged, so a corner can be placed as closely here as anywhere else. | OpenTopoMap (CC-BY-SA) |
 | Imported | A map file you copied onto the phone yourself. Needs no network at all. | your `.pmtiles` archive |
 
 **Offline maps** — frame a rectangle on the map, pick how much detail to keep, and

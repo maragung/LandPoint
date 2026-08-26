@@ -30,6 +30,7 @@ class SettingsRepository(private val context: Context) {
         val SECURE_SCREEN = booleanPreferencesKey("secure_screen")
         val STRIP_PHOTO_LOCATION = booleanPreferencesKey("strip_photo_location")
         val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
+        val CORNER_HINT_DONE = booleanPreferencesKey("corner_hint_done")
     }
 
     /**
@@ -208,6 +209,24 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setOnboardingDone(done: Boolean) = context.settingsDataStore.edit {
         it[Keys.ONBOARDING_DONE] = done
+    }
+
+    /**
+     * Whether the corner picker has explained itself once.
+     *
+     * Separate from [onboardingDone] because it answers a different question: not
+     * "has this person used the app before" but "have they been told that the
+     * crosshair marks a spot which can still be moved". Someone who has used the
+     * app for a year without ever drawing a boundary has seen the introduction and
+     * still needs this sentence — and having seen it, should never be shown it
+     * again over the ground they are trying to look at.
+     */
+    val cornerHintDone: Flow<Boolean> = context.settingsDataStore.data.map {
+        it[Keys.CORNER_HINT_DONE] ?: false
+    }
+
+    suspend fun setCornerHintDone(done: Boolean) = context.settingsDataStore.edit {
+        it[Keys.CORNER_HINT_DONE] = done
     }
 
     suspend fun setLanguage(language: Language) = context.settingsDataStore.edit {

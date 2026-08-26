@@ -9,6 +9,7 @@
     <!-- Tindakan umum -->
     <string name="action_save">Simpan</string>
     <string name="action_cancel">Batal</string>
+    <string name="action_close">Tutup</string>
     <string name="action_delete">Hapus</string>
     <string name="action_back">Kembali</string>
     <string name="action_edit">Ubah</string>
@@ -131,7 +132,7 @@
 
     <!-- Batas bidang -->
     <string name="boundary_title">Batas bidang</string>
-    <string name="boundary_hint">Berdiri di setiap sudut lalu ketuk Tambah sudut. Tiga sudut atau lebih menghasilkan luas.</string>
+    <string name="boundary_hint">Setiap sudut ditaruh di atas peta lebih dulu. Berdiri di sudutnya lalu ketuk Tambah sudut, atau tandai sendiri. Tiga sudut atau lebih menghasilkan luas.</string>
     <string name="boundary_add">Tambah sudut</string>
     <string name="boundary_capturing">Mengukur sudut…</string>
     <string name="boundary_undo">Batalkan</string>
@@ -144,8 +145,7 @@
     <plurals name="boundary_corners">
         <item quantity="other">%1$d sudut</item>
     </plurals>
-    <string name="msg_corner_too_close">Titik ini sama dengan sudut sebelumnya</string>
-    <string name="msg_corner_inserted">Ditambahkan sebagai sudut %1$d, pada sisi yang Anda ketuk</string>
+    <string name="msg_mark_pending">Pakai tandanya dulu, atau buang</string>
     <plurals name="msg_corners_added">
         <item quantity="other">%1$d sudut diambil dari lahan tetangga</item>
     </plurals>
@@ -153,17 +153,32 @@
     <string name="msg_corners_all_duplicate">Sudut-sudut itu sudah ada di batas ini</string>
 
     <!-- Pemilih sudut di peta -->
-    <string name="boundary_pick_on_map">Pilih di peta</string>
+    <string name="boundary_pick_on_map">Tandai di peta</string>
     <string name="boundary_pin_centroid">Titik pin lahan: %1$s</string>
     <string name="corner_picker_title">Tandai sudut-sudut</string>
-    <string name="corner_picker_tap_hint">Ketuk peta untuk menandai sudut, atau ketuk garisnya untuk menambah sudut di antara dua sudut yang dihubungkannya. Geser sudut untuk memindahkannya.</string>
+    <string name="corner_picker_tap_hint">Tepatkan silang di tengah pada sudut tanahnya, lalu ketuk Taruh tanda di sini. Tandanya masih bisa digeser atau ditepatkan sebelum dipakai.</string>
     <string name="corner_picker_online_map">Latar peta diambil dari internet. Tanpa sinyal latarnya kosong — sudut, luas, dan posisi Anda tetap berfungsi.</string>
-    <string name="corner_picker_use_gps">Pakai posisi saya</string>
     <string name="corner_picker_done">Pakai batas ini</string>
-    <string name="corner_picker_cancel">Batal</string>
+    <string name="corner_picker_place_mark">Taruh tanda di sini</string>
+    <string name="corner_picker_use_mark">Pakai tanda ini</string>
+    <string name="corner_picker_discard_mark">Buang tanda</string>
+    <string name="corner_picker_nudge_step">Langkah geser</string>
+    <string name="corner_picker_step_value">%1$s m</string>
+    <string name="corner_picker_nudge_north">Geser ke utara</string>
+    <string name="corner_picker_nudge_east">Geser ke timur</string>
+    <string name="corner_picker_nudge_south">Geser ke selatan</string>
+    <string name="corner_picker_nudge_west">Geser ke barat</string>
+    <string name="corner_picker_from_fix">Pindahkan ke posisi saya</string>
+    <string name="corner_picker_averaging">Merata-rata pembacaan…</string>
+    <string name="corner_picker_by_numbers">Ketik koordinat</string>
+    <string name="corner_picker_by_bearing">Jarak dan arah</string>
+    <string name="corner_picker_will_append">Sudut %1$s</string>
+    <string name="corner_picker_will_insert">Sisip antara %1$s dan %2$s</string>
+    <string name="corner_picker_too_close">Terlalu dekat dengan sudut %1$s</string>
+    <string name="corner_picker_about_accuracy">Tentang peta dan ketepatan</string>
+    <string name="corner_picker_mark_a11y">Tanda di %1$s</string>
 
     <!-- Menyunting sudut satu per satu -->
-    <string name="boundary_add_manual">Tambah dari koordinat</string>
     <string name="boundary_corners_title">Koordinat sudut</string>
     <string name="boundary_corner_number">#%1$d  %2$s</string>
     <string name="boundary_side_next">→ #%1$d  %2$s m  %3$s° %4$s</string>
@@ -177,14 +192,12 @@
     <string name="corner_dialog_title_edit">Sudut %1$d</string>
     <string name="corner_dialog_title_insert">Sudut baru %1$d</string>
     <string name="boundary_self_crossing">Sisi %1$d dan %2$d saling menyilang, jadi garisnya bukan satu bidang tertutup dan luas di bawah bukan tanah yang dicakupnya. Biasanya ada satu sudut yang urutannya salah — pindahkan ke atas atau ke bawah.</string>
-    <string name="boundary_add_bearing">Tambah dari azimut</string>
     <string name="boundary_from_neighbour">Ambil sudut dari lahan tetangga</string>
     <string name="corner_dialog_title_bearing">Sudut %1$d, diukur dari sudut %2$d</string>
     <string name="corner_dialog_bearing">Azimut (° dari utara)</string>
     <string name="corner_dialog_distance">Panjang sisi (m)</string>
     <string name="corner_dialog_bearing_hint">Seperti tertulis di surat ukur: derajat searah jarum jam dari utara, lalu panjang sisinya. 45, 45,5, dan 45°30\'20\" dibaca sama.</string>
     <string name="corner_dialog_bearing_result">Jatuh di %1$s</string>
-    <string name="corner_sheet_bearing">Ukur patok berikutnya dari sini</string>
     <string name="error_corner_bearing">Isi azimut antara 0 dan 360 derajat</string>
     <string name="error_corner_distance">Isi panjang sisinya dalam meter</string>
     <string name="error_corner_no_origin">Sudut itu sudah tidak ada untuk jadi acuan</string>
@@ -204,7 +217,7 @@
     <plurals name="neighbour_add">
         <item quantity="other">Tambah %1$d sudut</item>
     </plurals>
-    <string name="corner_picker_select_hint">Ketuk sebuah sudut untuk memilihnya.</string>
+    <string name="corner_picker_select_hint">Ketuk sebuah sudut untuk memilihnya, lalu pakai tombol hapus. Geser sudut untuk memindahkannya.</string>
     <string name="corner_picker_delete_selected">Hapus sudut %1$d</string>
 
     <!-- Pratinjau batas bidang -->
@@ -303,7 +316,7 @@
     <string name="shape_a11y_map">Peta batas bidang: %1$s, luas %2$s. Rincian catatan mencantumkan koordinat setiap sudut.</string>
     <string name="shape_a11y_map_no_area">Peta batas bidang: %1$s, belum cukup untuk menghitung luas.</string>
     <string name="shape_a11y_map_point">Peta. Bidang ini belum punya batas tersimpan, hanya posisinya.</string>
-    <string name="picker_a11y_map">Peta untuk menandai sudut, %1$s sejauh ini. Ketukan menaruh sudut di tempat jari mendarat pada peta. Untuk memasukkan koordinat sebagai angka, kembali lalu pakai %2$s.</string>
+    <string name="picker_a11y_map">Peta untuk menandai sudut, %1$s sejauh ini. Petanya tidak harus disentuh sama sekali: taruh tanda di tengah, geser dengan empat tombol arah, lalu pakai bila angkanya sudah tepat. Koordinat juga bisa langsung diketik.</string>
     <string name="detail_a11y_map">Peta batas bidang, %1$s. Membuka peta penuh.</string>
     <string name="detail_a11y_map_point">Peta lokasi bidang ini. Membuka peta penuh.</string>
 
@@ -457,7 +470,6 @@
     <string name="pdf_sketch_label">Sketsa</string>
     <string name="pdf_sketch_scale">%1$s m</string>
 
-
     <!-- Privasi dan keamanan -->
     <string name="settings_section_privacy">Privasi dan keamanan</string>
     <string name="settings_privacy_no_cloud">Data lahan dan foto tetap di HP ini. Tidak disalin ke backup cloud Google, dan juga tidak ikut lewat transfer langsung antar-perangkat Android — pakai Backup di bawah untuk menyimpan salinan yang Anda kendalikan sekaligus untuk pindah ke HP baru.</string>
@@ -498,16 +510,15 @@
     <string name="corner_sheet_title">Patok %1$d</string>
     <string name="corner_sheet_edit">Ubah koordinat</string>
     <string name="corner_sheet_delete">Hapus patok ini</string>
-    <string name="corner_sheet_insert">Sisipkan patok jadi nomor %1$d</string>
     <!-- Map styles: what the tiles under a boundary are drawn from. -->
     <string name="map_style">Tampilan peta</string>
     <string name="map_style_note">Citra udara adalah gambar permukaan tanah pada satu hari, bukan hasil ukur. Pakai untuk mengenali lokasinya — jangan sebagai bukti letak batas.</string>
     <string name="basemap_street">Peta jalan</string>
     <string name="basemap_street_summary">Jalan, nama tempat, dan bangunan. Perlu koneksi.</string>
     <string name="basemap_satellite">Satelit</string>
-    <string name="basemap_satellite_summary">Foto udara — sawah, atap, dan pohon apa adanya. Paling tajam di area kota; lebih dekat dari citra yang ada, gambar hanya diperbesar. Perlu koneksi.</string>
+    <string name="basemap_satellite_summary">Foto udara — sawah, atap, dan pohon apa adanya. Paling tajam di area kota; lebih dekat dari citra yang ada, gambarnya hanya diperbesar, sehingga bar skala tetap mencapai 2 m. Perlu koneksi.</string>
     <string name="basemap_terrain">Rupa bumi</string>
-    <string name="basemap_terrain_summary">Garis kontur dan bayangan bukit, untuk tanah berlereng. Perlu koneksi.</string>
+    <string name="basemap_terrain_summary">Garis kontur dan bayangan bukit, untuk tanah berlereng. Lebih dekat dari kontur yang tersedia, garisnya diperbesar dan jadi kabur, tapi bar skala tetap mencapai 10 m. Perlu koneksi.</string>
     <string name="basemap_imported">Peta offline</string>
     <string name="basemap_imported_summary">Berkas peta yang tersimpan di HP ini. Bisa tanpa sinyal.</string>
     <string name="basemap_imported_missing">Impor berkas .pmtiles di Setelan untuk memakainya.</string>
@@ -522,13 +533,10 @@
     <string name="map_fit">Tampilkan semuanya di layar</string>
     <string name="map_attribution_esri">Citra © Esri, Maxar, Earthstar Geographics</string>
     <string name="map_attribution_topo">© OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)</string>
-    <string name="corner_picker_show_controls">Tampilkan alat sudut</string>
-    <string name="corner_picker_hide_controls">Sembunyikan alat sudut, perluas peta</string>
     <!-- Panel posisi langsung di atas peta: apa yang dilaporkan penerima saat ini,
          dan seberapa jauh angka itu bisa dipercaya. Semua angka datang apa adanya
          dari Android, jadi yang tidak ada ditulis "tidak dilaporkan", bukan nol. -->
     <string name="telemetry_show">Tampilkan data posisi</string>
-    <string name="telemetry_hide">Sembunyikan data posisi</string>
     <string name="telemetry_title">Posisi Anda</string>
     <string name="telemetry_waiting">Mencari posisi Anda…</string>
     <string name="telemetry_waiting_short">Belum ada posisi</string>
