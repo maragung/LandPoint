@@ -63,9 +63,9 @@ open the record; open a record's boundary full screen to see its numbered
 corners, area and perimeter. Rotating the phone keeps the camera where you left
 it. Tiles you have already viewed stay cached, so a map you loaded at home still
 works in a field with no signal. Every style — Terrain included — zooms in far
-enough to read a **10 m scale bar**, and the drawn styles reach 2 m; where aerial
-coverage or contour detail runs out the tiles are simply enlarged, because a coarse
-picture of the right ground is worth more than a refusal to go closer.
+enough to read a **10 m scale bar**, and Street and Satellite go on to 2 m; where
+aerial coverage or contour detail runs out the tiles are simply enlarged, because a
+coarse picture of the right ground is worth more than a refusal to go closer.
 
 **Where you are, in full** — a panel on the map reads out latitude, longitude,
 accuracy in metres, altitude, speed, bearing, the time of the fix, which receiver
@@ -81,7 +81,7 @@ at full rate in a pocket.
 | Style | What it shows | Source |
 | --- | --- | --- |
 | Street | Roads, names, buildings, drawn from vector tiles so the labels stay sharp at any zoom. The default, and the lightest on data. | OpenFreeMap Liberty, from OpenStreetMap data |
-| Satellite | The ground itself — roofs, trees, field edges — so a corner can be checked against something you can see. Photographic detail runs to about a 20 m scale bar over towns and 50 m elsewhere, and the camera keeps going past that to a 2 m bar with the last photograph enlarged rather than replaced by a placeholder. | Esri World Imagery (Esri, Maxar, Earthstar Geographics) |
+| Satellite | The ground itself — roofs, trees, field edges — so a corner can be checked against something you can see. Photographs go down to about a 10 m scale bar over towns and 20 m elsewhere, and the camera keeps going past that to a 2 m bar with the last photograph enlarged rather than replaced by a placeholder. | Esri World Imagery (Esri, Maxar, Earthstar Geographics) |
 | Terrain | Contours and hill shading, for sloping or terraced land. Contour detail stops at about a 50 m scale bar, but the camera now goes on to 10 m with the lines enlarged, so a corner can be placed as closely here as anywhere else. | OpenTopoMap (CC-BY-SA) |
 | Imported | A map file you copied onto the phone yourself. Needs no network at all. | your `.pmtiles` archive |
 
