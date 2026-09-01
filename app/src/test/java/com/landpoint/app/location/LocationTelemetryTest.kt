@@ -250,6 +250,53 @@ class LocationTelemetryTest {
     }
 
     @Test
+    fun `a vague fix cannot widen the gate and jump through it`() {
+        // The bug: a fix that arrived claiming a huge accuracy used to set the
+        // outlier tolerance from its own claim, so a jump of three times that
+        // was "within tolerance" and the marker leapt. The tolerance now comes
+        // from the better of the two accuracies, so this fix is judged by the
+        // four-metre one it is landing on.
+        val smoother = PositionSmoother()
+        smoother.feed(lat, lon, 4.0, moving = false)
+        val (latOut, _) = smoother.feed(northOf(500.0), lon, 1000.0, moving = false)
+        assertEquals("a 500 m jump is not within a 4 m fix's tolerance", lat, latOut, 0.0)
+    }
+
+    @Test
+    fun `a vague fix folds in at a weight the screen cannot follow`() {
+        // The other half of the jump: a tower fix used to pull with the same
+        // strength as the satellite fix before it. The jump here stays inside the
+        // 15 m outlier floor so the weight is what is under test, not rejection:
+        // weighted by accuracy, ten metres of claim should move the marker by
+        // a tenth of a metre, not the 1.5 m an equal-weight fix would.
+        val smoother = PositionSmoother()
+        smoother.feed(lat, lon, 4.0, moving = false)
+        val (latOut, _) = smoother.feed(northOf(10.0), lon, 1000.0, moving = false)
+        val shiftM = (latOut - lat) * 111_320.0
+        assertTrue("marker moved $shiftM m for a vague fix", shiftM < 0.5)
+        assertTrue("but it is never ignored entirely", shiftM > 0.0)
+    }
+
+    @Test
+    fun `a fix with no accuracy at all is treated as vague, not as perfect`() {
+        val smoother = PositionSmoother()
+        smoother.feed(lat, lon, 4.0, moving = false)
+        val (latOut, _) = smoother.feed(northOf(500.0), lon, null, moving = false)
+        assertEquals(lat, latOut, 0.0)
+    }
+
+    @Test
+    fun `the marker's accuracy only ever improves`() {
+        // Once a good fix has been shown, a vague one folded in at a tiny weight
+        // must not loosen the gate the next fix is judged against.
+        val smoother = PositionSmoother()
+        smoother.feed(lat, lon, 4.0, moving = false)
+        smoother.feed(northOf(0.5), lon, 1000.0, moving = false)
+        val (latOut, _) = smoother.feed(northOf(50.0), lon, 1000.0, moving = false)
+        assertEquals("a 50 m jump is still judged by the 4 m fix", latOut, lat, 0.0)
+    }
+
+    @Test
     fun `smoothing across the antimeridian stays on the near side`() {
         val smoother = PositionSmoother()
         smoother.feed(0.0, 179.999_9, 5.0, moving = true)

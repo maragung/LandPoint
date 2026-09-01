@@ -42,6 +42,40 @@ fun Context.hasLocationPermission(): Boolean =
             PackageManager.PERMISSION_GRANTED
 
 /**
+ * Whether one provider's fix outranks another's, when both are subscribed and
+ * something has to choose.
+ *
+ * The referee exists because of the jump the live marker used to make: GPS and
+ * the network provider are subscribed together, and a cell-tower fix — accurate
+ * to hundreds of metres — arrives on the same listener as a satellite fix
+ * accurate to a handful. Whichever arrived last won, so the marker was dragged
+ * to a tower's idea of the position and back again, over and over, on a phone
+ * that had a good fix the whole time.
+ *
+ * The rule is consent, not preference: a satellite fix always outranks a
+ * tower fix, because a satellite fix is the only kind a land boundary can be
+ * marked from. But a tower fix is never discarded — it is the only fix there
+ * is under a roof — so it flows through until something better says otherwise.
+ */
+internal object ProviderArbiter {
+
+    /**
+     * True when [incoming] should be allowed to move the marker, given what was
+     * last shown and where it came from.
+     */
+    fun accepts(incoming: FixSource, lastShown: FixSource?): Boolean {
+        if (lastShown == null) return true
+        // A tower fix never displaces a satellite fix; a satellite fix
+        // displaces anything. FUSED is treated as satellite-grade: it is the
+        // vendor's own blend and on most devices is where the GNSS fix arrives.
+        val incomingIsSatellite = incoming == FixSource.GPS || incoming == FixSource.FUSED
+        val shownIsSatellite =
+            lastShown == FixSource.GPS || lastShown == FixSource.FUSED
+        return incomingIsSatellite || !shownIsSatellite
+    }
+}
+
+/**
  * LocationManager-based provider — no Google Play Services dependency.
  */
 class LocationProvider(private val context: Context) {
@@ -179,6 +213,12 @@ class LocationProvider(private val context: Context) {
     /**
      * Continuous location updates.
      *
+     * Every usable provider is subscribed at once (see [usableProviders]), which
+     * is deliberate: under a roof the cell-tower fix may be the only one that
+     * ever arrives. What stops that from making the marker jump is
+     * [ProviderArbiter]: a tower fix never displaces a satellite fix on the
+     * stream, so the two accuracies never fight over one marker.
+     *
      * The two arguments are what makes adaptive tracking possible: `LocationManager`
      * fixes an interval at subscription time and offers no way to change it
      * afterwards, so a caller that wants to slow down re-subscribes with a longer
@@ -197,8 +237,28 @@ class LocationProvider(private val context: Context) {
         intervalMs: Long = DEFAULT_INTERVAL_MS,
         minDistanceM: Float = DEFAULT_MIN_DISTANCE_M
     ): Flow<LocationData> = callbackFlow {
-        val listener = LocationListener { location ->
-            trySend(location.toLocationData())
+        // The listener is shared by every provider below, so this has to be
+        // outside it: one field, read and written on the main looper only.
+        var lastAcceptedSource: FixSource? = null
+
+        val listener = object : LocationListener {
+            override fun onLocationChanged(location: Location) {
+                // The referee: with GPS and NETWORK subscribed at once, the
+                // tower fix that arrives after a satellite fix must not drag
+                // the marker away from it. GPS-fused fixes still pass through
+                // and displace a tower fix immediately, so the marker jumps
+                // once — towards better — and then holds.
+                if (!ProviderArbiter.accepts(
+                        FixSource.of(location.provider),
+                        lastAcceptedSource
+                    )
+                ) return
+                lastAcceptedSource = FixSource.of(location.provider)
+                trySend(location.toLocationData())
+            }
+
+            @Deprecated("Deprecated in API 29", ReplaceWith(""))
+            override fun onStatusChanged(provider: String?, status: Int, extras: android.os.Bundle?) {}
         }
 
         val providers = usableProviders()

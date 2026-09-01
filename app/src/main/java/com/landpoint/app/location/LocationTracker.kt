@@ -29,7 +29,11 @@ import kotlinx.coroutines.launch
  * * **Nothing is invented.** Latitude and longitude are smoothed towards the
  *   readings the receiver gave and never predicted past them; accuracy, altitude,
  *   speed and bearing are passed through untouched. A field the fix did not carry
- *   stays null all the way to the screen.
+ *   stays null all the way to the screen. The smoothing is weighted by each
+ *   fix's own accuracy, and the provider beneath has already refused a tower
+ *   fix the right to displace a satellite one, so the position shown is always
+ *   built from the best readings that arrived — never from whichever arrived
+ *   last.
  * * **The update rate follows the fix, not the clock.** A poor or moving fix is
  *   asked for often, a good and stationary one rarely — see [TrackingCadence]. The
  *   subscription is torn down and remade when the cadence changes, which is the only
@@ -106,6 +110,11 @@ class LocationTracker(
         // Not fed to the smoother: a last-known fix can be from another town, and
         // seeding the filter with it would make the first real fix look like an
         // outlier and hold the marker back from where the user actually is.
+        //
+        // Skipped rather than shown when a recent fix is already up: the bootstrap
+        // path has no referee (it is a one-shot read, not the shared listener), so
+        // a last-known tower fix could otherwise land on top of a live satellite
+        // fix and drag the marker a few hundred metres the moment tracking starts.
         launch {
             val bootstrap = provider.getCurrentLocation() ?: return@launch
             if (state.hasFix) return@launch
@@ -123,6 +132,10 @@ class LocationTracker(
                 // coroutine cannot wait for its own cancellation, and this collector
                 // is a different one.
                 subscription?.cancelAndJoin()
+                // The smoother's memory belongs to one continuous subscription:
+                // re-subscribing is a fresh request, and keeping the old position
+                // would judge the new stream's first fix against a stale gate.
+                smoother.reset()
                 subscription = launch {
                     provider.observeLocation(wanted.intervalMs, wanted.minDistanceM)
                         .restartingOnEnd(RETRY_GAP_MS)

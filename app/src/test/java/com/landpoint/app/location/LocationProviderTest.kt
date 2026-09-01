@@ -2,9 +2,12 @@ package com.landpoint.app.location
 
 import android.Manifest
 import android.content.Context
+import android.location.Location
 import android.location.LocationManager
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -157,6 +160,68 @@ class LocationProviderTest {
         assertFalse(provider.isLocationEnabled())
         assertNull(provider.getCurrentLocation())
     }
+
+    /**
+     * The jump this release fixes. GPS and NETWORK are subscribed together, and
+     * before the arbiter whichever fix arrived last won the listener — so a
+     * tower fix landing after a satellite fix dragged the marker hundreds of
+     * metres and back.
+     */
+    @Test
+    fun `a tower fix never displaces a satellite fix on the stream`() = runTest {
+        grantPermissions()
+        val manager = context.locationManager()
+        val emissions = mutableListOf<LocationData>()
+        val job = launch {
+            provider.observeLocation().toList(emissions)
+        }
+        advanceUntilIdle()
+
+        shadowOf(manager).simulateLocation("gps", location("gps", -6.914744, 107.609810, 4f))
+        shadowOf(manager).simulateLocation("network", location("network", -6.9, 107.6, 500f))
+        advanceUntilIdle()
+
+        job.cancel()
+        assertTrue(
+            "the tower fix must not be emitted after the satellite fix",
+            emissions.none { it.provider == "network" }
+        )
+        assertTrue(emissions.any { it.provider == "gps" })
+    }
+
+    /** The other direction: a satellite fix displaces a tower fix immediately. */
+    @Test
+    fun `a satellite fix displaces a tower fix at once`() = runTest {
+        grantPermissions()
+        val manager = context.locationManager()
+        val emissions = mutableListOf<LocationData>()
+        val job = launch {
+            provider.observeLocation().toList(emissions)
+        }
+        advanceUntilIdle()
+
+        shadowOf(manager).simulateLocation("network", location("network", -6.9, 107.6, 500f))
+        shadowOf(manager).simulateLocation("gps", location("gps", -6.914744, 107.609810, 4f))
+        advanceUntilIdle()
+
+        job.cancel()
+        assertTrue(emissions.any { it.provider == "network" })
+        assertTrue(emissions.any { it.provider == "gps" })
+    }
+
+    /** Robolectric needs a Location built the way the platform delivers one. */
+    private fun location(
+        provider: String,
+        latitude: Double,
+        longitude: Double,
+        accuracy: Float
+    ): Location =
+        Location(provider).apply {
+            setLatitude(latitude)
+            setLongitude(longitude)
+            setAccuracy(accuracy)
+            setTime(System.currentTimeMillis())
+        }
 
     /** Reverse geocoding is optional on many devices and must degrade quietly. */
     @Test

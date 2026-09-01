@@ -71,10 +71,13 @@ coarse picture of the right ground is worth more than a refusal to go closer.
 accuracy in metres, altitude, speed, bearing, the time of the fix, which receiver
 it came from, how many satellites are in use and how strong they are. The circle
 around the position marker is the accuracy Android reported, drawn to scale, so it
-shrinks as the fix improves. Fixes are averaged by their own stated accuracy,
-readings that disagree with the rest are dropped, and the update rate loosens once
-the fix is good and the phone is still — no invented precision, and no radio held
-at full rate in a pocket.
+shrinks as the fix improves. A position drawn from several receivers at once —
+satellite and cell tower — keeps the satellite fix: the tower never displaces it,
+and a fix is folded into the marker in proportion to its own stated accuracy, so a
+vague reading cannot yank the marker the way it once did. A reading that disagrees
+with the rest is held back rather than averaged in, and the update rate loosens
+once the fix is good and the phone is still — no invented precision, and no radio
+held at full rate in a pocket.
 
 **Four map styles**, chosen once and used by every map in the app:
 

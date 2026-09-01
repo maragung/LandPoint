@@ -3,6 +3,7 @@ package com.landpoint.app.location
 import com.landpoint.app.util.GeoUtils
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * How good the satellite signal is, from what the receiver itself reports.
@@ -304,6 +305,19 @@ class MotionGate {
  * someone who starts walking, which is worse — so the strength of the smoothing
  * follows [MotionGate]: heavy at rest, barely there in motion.
  *
+ * Two rules keep a vague fix from outvoting a good one, both of them learned
+ * from the marker that jumped around a field with a perfectly good fix:
+ *
+ *  * The outlier tolerance is set by the *better* of the two accuracies — the
+ *    one already shown and the one arriving — never by the arriving fix alone.
+ *    A fix that claims two kilometres of accuracy used to license a jump of
+ *    six; now a vague fix is judged by the position it lands on, which is the
+ *    only fixed point either of them has.
+ *  * The smoothing weight is divided by the arriving fix's own accuracy, so a
+ *    fix fifty times vaguer than the one on screen moves the marker fifty
+ *    times less. Before, both pulled with the same strength and the marker
+ *    ping-ponged between them.
+ *
  * Not a Kalman filter, and not pretending to be. A filter that models velocity
  * would need to be trusted enough to predict, and a prediction is precisely what
  * this app must not print. This only ever reports a weighted mean of positions
@@ -319,11 +333,27 @@ class PositionSmoother {
     val current: Pair<Double, Double>?
         get() = if (latitude.isNaN()) null else latitude to longitude
 
+    /**
+     * The accuracy that decides how far a fix may jump, in metres.
+     *
+     * The better of the two fixes involved — never the vaguer one, and never
+     * absent (a fix with no accuracy is judged as if it claimed [VAGUE_M]).
+     */
+    private var toleranceAccuracyM = VAGUE_M
+
+    /**
+     * The accuracy the marker currently sits on, in metres, or [VAGUE_M] before
+     * the first fix.
+     */
+    private var currentAccuracyM = VAGUE_M
+
     /** Forgets everything, for a new capture or after permission comes back. */
     fun reset() {
         latitude = Double.NaN
         longitude = Double.NaN
         rejections = 0
+        toleranceAccuracyM = VAGUE_M
+        currentAccuracyM = VAGUE_M
     }
 
     /**
@@ -333,14 +363,23 @@ class PositionSmoother {
      * fast enough that smoothing would show the user behind where they are.
      */
     fun feed(latitudeIn: Double, longitudeIn: Double, accuracyM: Double?, moving: Boolean): Pair<Double, Double> {
+        // Absent accuracy is read as vague rather than as perfect: a receiver
+        // that does not say how good its fix is has not earned the benefit.
+        val accuracy = accuracyM?.takeIf { it.isFinite() && it > 0.0 } ?: VAGUE_M
+
         if (latitude.isNaN()) {
             latitude = latitudeIn
             longitude = longitudeIn
+            currentAccuracyM = accuracy
+            toleranceAccuracyM = accuracy
             return latitude to longitude
         }
 
         val jump = GeoUtils.distance(latitude, longitude, latitudeIn, longitudeIn)
-        val tolerated = max(OUTLIER_FLOOR_M, 3.0 * (accuracyM ?: OUTLIER_FLOOR_M))
+        // The better of the two accuracies, so the vaguer fix cannot widen the
+        // gate and walk itself through.
+        toleranceAccuracyM = min(toleranceAccuracyM, accuracy)
+        val tolerated = max(OUTLIER_FLOOR_M, OUTLIER_SCALE * toleranceAccuracyM)
         if (!moving && jump > tolerated && rejections < MAX_REJECTIONS) {
             // Further away than its own uncertainty can explain, from a phone that
             // is not being carried: almost always a reflected signal. Held back —
@@ -352,11 +391,23 @@ class PositionSmoother {
         }
         rejections = 0
 
-        val alpha = if (moving) MOVING_ALPHA else RESTING_ALPHA
+        // Accuracy-weighted: the step towards the new fix is scaled by how much
+        // vaguer it is than what is already on screen, so a tower fix arriving
+        // after a good satellite fix moves the marker a proportion of a percent
+        // rather than the same 15% a fresh satellite fix would.
+        val vagueness = accuracy / currentAccuracyM
+        val base = if (moving) MOVING_ALPHA else RESTING_ALPHA
+        val alpha = (base / (base + vagueness * (1.0 - base))).coerceIn(MIN_ALPHA, 1.0)
+
         latitude += alpha * (latitudeIn - latitude)
         // Longitude differences are taken the short way round so a fix either side
         // of the antimeridian does not average to the far side of the planet.
         longitude = normaliseLongitude(longitude + alpha * shortestLongitudeDelta(longitudeIn - longitude))
+
+        // The marker's accuracy only improves. A vague fix folded in at a tiny
+        // weight barely moves the marker, so it must not loosen the accuracy the
+        // next fix is judged against either.
+        currentAccuracyM = min(currentAccuracyM, accuracy)
         return latitude to longitude
     }
 
@@ -383,7 +434,26 @@ class PositionSmoother {
         /** No jump smaller than this is ever treated as an outlier. */
         const val OUTLIER_FLOOR_M = 15.0
 
+        /**
+         * How many times the deciding accuracy a stationary fix may jump.
+         *
+         * Named now that two accuracies are involved: the vaguer one used to set
+         * this gate and then walk itself through it.
+         */
+        const val OUTLIER_SCALE = 3.0
+
         /** After this many refusals in a row, the receiver is believed. */
         const val MAX_REJECTIONS = 3
+
+        /**
+         * The accuracy assumed of a fix that states none, in metres.
+         *
+         * Poor enough that a fix which claims nothing is never trusted over one
+         * which claims something; finite enough that it is not rejected outright.
+         */
+        const val VAGUE_M = 100.0
+
+        /** However vague the arriving fix, it is never ignored entirely. */
+        const val MIN_ALPHA = 0.01
     }
 }
