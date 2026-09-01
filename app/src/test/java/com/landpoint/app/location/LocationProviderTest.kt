@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.location.Location
 import android.location.LocationManager
+import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.toList
@@ -180,6 +181,10 @@ class LocationProviderTest {
 
         shadowOf(manager).simulateLocation("gps", location("gps", -6.914744, 107.609810, 4f))
         shadowOf(manager).simulateLocation("network", location("network", -6.9, 107.6, 500f))
+        // The shadow hands each fix to the listener through the main looper, which
+        // is paused under Robolectric: the coroutine scheduler alone would leave
+        // every delivery sitting on it, and the test would prove nothing.
+        shadowOf(Looper.getMainLooper()).idle()
         advanceUntilIdle()
 
         job.cancel()
@@ -203,6 +208,7 @@ class LocationProviderTest {
 
         shadowOf(manager).simulateLocation("network", location("network", -6.9, 107.6, 500f))
         shadowOf(manager).simulateLocation("gps", location("gps", -6.914744, 107.609810, 4f))
+        shadowOf(Looper.getMainLooper()).idle()
         advanceUntilIdle()
 
         job.cancel()

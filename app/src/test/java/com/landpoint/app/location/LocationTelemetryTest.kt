@@ -288,12 +288,16 @@ class LocationTelemetryTest {
     @Test
     fun `the marker's accuracy only ever improves`() {
         // Once a good fix has been shown, a vague one folded in at a tiny weight
-        // must not loosen the gate the next fix is judged against.
+        // must not loosen the gate the next fix is judged against. The vague fix
+        // in the middle does move the marker a fraction of a millimetre — that is
+        // its tiny weight doing its job — so what is asserted is that the 50 m
+        // jump is still refused, not that the marker never moved at all.
         val smoother = PositionSmoother()
         smoother.feed(lat, lon, 4.0, moving = false)
         smoother.feed(northOf(0.5), lon, 1000.0, moving = false)
         val (latOut, _) = smoother.feed(northOf(50.0), lon, 1000.0, moving = false)
-        assertEquals("a 50 m jump is still judged by the 4 m fix", latOut, lat, 0.0)
+        val shiftM = (latOut - lat) * 111_320.0
+        assertTrue("the 50 m jump must be refused: marker moved $shiftM m", shiftM < 0.01)
     }
 
     @Test
