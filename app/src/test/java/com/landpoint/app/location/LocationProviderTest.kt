@@ -6,6 +6,7 @@ import android.location.Location
 import android.location.LocationManager
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
@@ -39,6 +40,7 @@ import org.robolectric.shadows.ShadowApplication
  * install [ThrowingLocationManagerShadow], which throws the way a device does.
  * Without that shadow every assertion here would pass against the unfixed code.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(shadows = [ThrowingLocationManagerShadow::class])
 class LocationProviderTest {
