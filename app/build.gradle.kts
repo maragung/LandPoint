@@ -21,8 +21,8 @@ android {
         applicationId = "com.landpoint.app"
         minSdk = 28
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.5.3"
+        versionCode = 10
+        versionName = "1.6.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         resourceConfigurations += listOf("en", "in")
     }
