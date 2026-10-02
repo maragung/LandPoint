@@ -33,6 +33,11 @@ data class LandDetailUiState(
      * recomposition of a screen that scrolls.
      */
     val boundary: List<GeoPoint> = emptyList(),
+    /**
+     * Same corners with stable ids, for binding corner photos to their corner
+     * in the coordinate list below.
+     */
+    val corners: List<com.landpoint.app.data.model.CornerPoint> = emptyList(),
     val isLoading: Boolean = true,
     val dms: Boolean = false,
     val imperial: Boolean = false,
@@ -74,6 +79,8 @@ class LandDetailViewModel(
         LandDetailUiState(
             land = land,
             boundary = land?.boundary.orEmpty(),
+            corners = com.landpoint.app.data.model.GeometryCodec
+                .decodeCorners(land?.geometryJson),
             isLoading = false,
             dms = format == SettingsRepository.CoordFormat.DMS,
             imperial = units == SettingsRepository.Units.IMPERIAL,

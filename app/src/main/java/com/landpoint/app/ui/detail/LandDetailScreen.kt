@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.Directions
 import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -339,7 +340,12 @@ private fun DetailContent(
         )
 
         if (state.boundary.isNotEmpty()) {
-            CornerCoordinates(boundary = state.boundary, dms = state.dms)
+            CornerCoordinates(
+                boundary = state.boundary,
+                corners = state.corners,
+                photos = land.photos,
+                dms = state.dms
+            )
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -534,7 +540,12 @@ private val CARD_FIT_PADDING = 16.dp
  * hold hundreds of points, so only the first few are shown until asked.
  */
 @Composable
-private fun CornerCoordinates(boundary: List<GeoPoint>, dms: Boolean) {
+private fun CornerCoordinates(
+    boundary: List<GeoPoint>,
+    corners: List<com.landpoint.app.data.model.CornerPoint>,
+    photos: List<Photo>,
+    dms: Boolean
+) {
     var expanded by remember { mutableStateOf(false) }
     val collapsedCount = 10
     val shown = if (expanded) boundary else boundary.take(collapsedCount)
@@ -558,11 +569,32 @@ private fun CornerCoordinates(boundary: List<GeoPoint>, dms: Boolean) {
             val accuracy = point.accuracyM?.let {
                 stringResource(R.string.boundary_corner_accuracy, GeoUtils.formatAccuracy(it))
             }
-            Text(
-                if (accuracy == null) coordinates else "$coordinates  $accuracy",
-                style = MaterialTheme.typography.bodyMedium,
-                fontFamily = FontFamily.Monospace
-            )
+            // Proof, where there is any: how many photos this corner holds.
+            val cornerId = corners.getOrNull(index)?.id
+            val photoCount = if (cornerId == null) 0
+                else photos.count { it.cornerId == cornerId }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    if (accuracy == null) coordinates else "$coordinates  $accuracy",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.weight(1f)
+                )
+                if (photoCount > 0) {
+                    Icon(
+                        Icons.Outlined.PhotoCamera,
+                        contentDescription = pluralStringResource(
+                            R.plurals.corner_photo_count, photoCount, photoCount
+                        ),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
         if (boundary.size > collapsedCount) {
             TextButton(onClick = { expanded = !expanded }) {
