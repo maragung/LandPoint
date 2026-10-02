@@ -211,7 +211,12 @@ class WalkTrackService : Service() {
      * refusal here must not end a walk that is otherwise going perfectly well. From
      * API 33 the walk runs whether or not the notification can be shown; the system
      * still lists the service in its own task manager.
+     *
+     * The POST_NOTIFICATIONS permission is asked in the editor before a walk
+     * starts; the runCatching stands guard for a revocation mid-walk, which is a
+     * SecurityException at this call. Lint cannot see that, hence the suppression.
      */
+    @android.annotation.SuppressLint("MissingPermission")
     private fun show(progress: WalkProgress) {
         runCatching { notifications.notify(NOTIFICATION_ID, notification(progress)) }
     }

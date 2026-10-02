@@ -226,7 +226,7 @@ fun LandPreviewScreen(
                                     if (count > 0) {
                                         Icon(
                                             Icons.Outlined.PhotoCamera,
-                                            contentDescription = stringResource(
+                                            contentDescription = pluralStringResource(
                                                 R.plurals.corner_photo_count, count, count
                                             ),
                                             tint = MaterialTheme.colorScheme.primary

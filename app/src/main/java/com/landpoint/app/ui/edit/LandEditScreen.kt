@@ -1085,7 +1085,7 @@ private fun CornerPhotoSheet(
         ) {
             Text(
                 stringResource(R.string.corner_sheet_title, number) +
-                    if (photoCount > 0) " · " + stringResource(
+                    if (photoCount > 0) " · " + pluralStringResource(
                         R.plurals.corner_photo_count, photoCount, photoCount
                     ) else "",
                 style = MaterialTheme.typography.titleMedium,
