@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.EditLocationAlt
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.GpsFixed
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -133,6 +134,7 @@ fun CornerPickerScreen(
     onMoveCorner: (String, Double, Double) -> Unit,
     onSelectCorner: (String) -> Unit,
     onDeleteSelected: () -> Unit,
+    onCornerPhoto: (String) -> Unit = {},
     onUndo: () -> Unit,
     onClear: () -> Unit,
     onDone: () -> Unit,
@@ -344,6 +346,7 @@ fun CornerPickerScreen(
                         }
                     },
                     onDeleteSelected = onDeleteSelected,
+                    onPhotoSelected = { state.selectedCornerId?.let(onCornerPhoto) },
                     onUndo = onUndo,
                     onClear = onClear,
                     onDone = onDone
@@ -566,6 +569,7 @@ private fun IdleControls(
     sources: List<MarkSourceAction>,
     onPlaceMark: () -> Unit,
     onDeleteSelected: () -> Unit,
+    onPhotoSelected: () -> Unit,
     onUndo: () -> Unit,
     onClear: () -> Unit,
     onDone: () -> Unit
@@ -586,6 +590,14 @@ private fun IdleControls(
             }
 
             state.selectedCornerNumber?.let { number ->
+                IconButton(onClick = onPhotoSelected, enabled = !busy) {
+                    Icon(
+                        Icons.Outlined.PhotoCamera,
+                        contentDescription = stringResource(
+                            R.string.corner_sheet_photo
+                        ) + " $number"
+                    )
+                }
                 IconButton(onClick = onDeleteSelected, enabled = !busy) {
                     Icon(
                         Icons.Outlined.Delete,

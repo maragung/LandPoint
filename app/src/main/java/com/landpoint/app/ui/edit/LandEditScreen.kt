@@ -222,6 +222,9 @@ fun LandEditScreen(
 
     // Which corner the photo sheet is for (null = general photo choice).
     var photoCornerIndex by remember { mutableStateOf<Int?>(null) }
+    // Draft corner id the picker's photo button is for. Draft ids become the
+    // boundary's corner ids on commit, so a photo bound here survives Done.
+    var pickerPhotoId by remember { mutableStateOf<String?>(null) }
     val takeGeneralPhoto: () -> Unit = {
         viewModel.requestPhotoForCorner(null)
         val (file, uri) = viewModel.newCameraTarget()
@@ -257,6 +260,48 @@ fun LandEditScreen(
     // to hand a result back across a navigation boundary.
     if (state.isPickerOpen) {
         val currentLocation by viewModel.currentLocation.collectAsStateWithLifecycle()
+        // Photo for a corner still on the map. Rendered here rather than below:
+        // this branch returns before the Scaffold, and the launchers above are
+        // already remembered, so they work from here too.
+        val pickerDraftIndex = pickerPhotoId?.let { draftId ->
+            state.draftBoundary.indexOfFirst { it.id == draftId }
+        }
+        // The corner can go away under an open sheet (undo/clear); drop the
+        // sheet rather than writing it off-composition during the block below.
+        LaunchedEffect(pickerDraftIndex) {
+            if (pickerDraftIndex != null && pickerDraftIndex < 0) pickerPhotoId = null
+        }
+        pickerPhotoId?.let { draftId ->
+            val draftIndex = pickerDraftIndex ?: -1
+            if (draftIndex >= 0) {
+                CornerPhotoSheet(
+                    number = draftIndex + 1,
+                    photoCount = state.photos.count { it.cornerId == draftId },
+                    onDismiss = { pickerPhotoId = null },
+                    onTake = {
+                        pickerPhotoId = null
+                        viewModel.requestPhotoForCorner(draftId)
+                        val (file, uri) = viewModel.newCameraTarget()
+                        val launched = runCatching {
+                            cameraLauncher.launch(uri)
+                        }.isSuccess
+                        pendingCapture = if (launched) file else null
+                        if (!launched) viewModel.showMessage(noCameraMessage)
+                    },
+                    onPick = {
+                        pickerPhotoId = null
+                        viewModel.requestPhotoForCorner(draftId)
+                        runCatching {
+                            pickerLauncher.launch(
+                                androidx.activity.result.PickVisualMediaRequest(
+                                    ActivityResultContracts.PickVisualMedia.ImageOnly
+                                )
+                            )
+                        }.onFailure { viewModel.showMessage(noPickerMessage) }
+                    }
+                )
+            }
+        }
         CornerPickerScreen(
             state = state,
             currentLocation = currentLocation,
@@ -276,6 +321,7 @@ fun LandEditScreen(
             onMoveCorner = viewModel::moveDraftCorner,
             onSelectCorner = viewModel::selectDraftCorner,
             onDeleteSelected = viewModel::removeSelectedDraftCorner,
+            onCornerPhoto = { draftId -> pickerPhotoId = draftId },
             onUndo = viewModel::undoDraftCorner,
             onClear = viewModel::clearDraftCorners,
             onDone = viewModel::commitCornerPicker,
