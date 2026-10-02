@@ -9,6 +9,7 @@ import com.landpoint.app.data.PhotoStore
 import com.landpoint.app.data.db.LandDatabase
 import com.landpoint.app.data.model.GeometryCodec
 import com.landpoint.app.data.model.GeometryType
+import com.landpoint.app.data.model.toCorners
 import com.landpoint.app.data.model.toEntity
 import com.landpoint.app.util.GeoPoint
 import kotlinx.coroutines.test.runTest
@@ -124,6 +125,29 @@ class BackupManagerTest {
         assertTrue("restored photo must exist", restoredFile.exists())
         assertArrayEquals(bytes, restoredFile.readBytes())
         assertEquals("pagar utara", land.photos.single().caption)
+    }
+
+    @Test
+    fun `a corner photo keeps its corner through a backup round trip`() = runTest {
+        val corners = boundary.toCorners()
+        val land = LandTestFactory.land(name = "Kebun kopi").copy(
+            geometryType = GeometryType.POLYGON,
+            geometryJson = GeometryCodec.encodeCorners(corners)
+        )
+        repository.save(land.toEntity())
+        val path = photoStore.persistStream(ByteArray(128) { 7 }.inputStream())!!
+        repository.addPhoto(land.id, path, caption = "patok 1", cornerId = corners[0].id)
+
+        val file = archive()
+        assertFalse(manager.backup(Uri.fromFile(file)).isFailure)
+        repository.deleteAll()
+
+        val restored = manager.restore(Uri.fromFile(file), DuplicateStrategy.KEEP_BOTH)
+        assertFalse(restored.error ?: "", restored.isFailure)
+        val photos = repository.getAllLands().single().photos
+        assertEquals(1, photos.size)
+        assertEquals(corners[0].id, photos.single().cornerId)
+        assertEquals("patok 1", photos.single().caption)
     }
 
     @Test

@@ -117,6 +117,7 @@ class BackupManager(
                 uuid = photo.id,
                 fileName = "${photo.id}.jpg",
                 caption = photo.caption,
+                cornerId = photo.cornerId,
                 createdAt = photo.createdAt
             )
         }

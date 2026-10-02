@@ -47,6 +47,8 @@ data class PhotoExportJson(
     val uuid: String,
     val fileName: String,
     val caption: String = "",
+    /** Stable corner id this photo proves; null for a general land photo. */
+    val cornerId: String? = null,
     val createdAt: Long
 )
 

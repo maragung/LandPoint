@@ -210,7 +210,7 @@ class ImportExportManager(
             val path = photoPaths[photo.fileName] ?: continue
             // A restored photo gets a fresh row id: keeping the original would
             // collide when the same backup is restored twice with KEEP_BOTH.
-            repository.addPhoto(landId, path, photo.caption)
+            repository.addPhoto(landId, path, photo.caption, photo.cornerId)
             photosLinked++
         }
 
