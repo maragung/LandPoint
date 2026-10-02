@@ -30,6 +30,10 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The action's default package list still contains the obsolete
+          # `tools` package and fails the whole step on a fresh runner image.
+          packages: platform-tools platforms;android-35 build-tools;35.0.0
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
