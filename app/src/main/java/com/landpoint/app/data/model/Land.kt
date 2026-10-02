@@ -33,6 +33,7 @@ data class Photo(
     val landId: String,
     val filePath: String,
     val caption: String,
+    val cornerId: String? = null,
     val createdAt: Long
 )
 
@@ -60,6 +61,7 @@ fun PhotoEntity.toDomain(): Photo = Photo(
     landId = landId,
     filePath = filePath,
     caption = caption,
+    cornerId = cornerId,
     createdAt = createdAt
 )
 

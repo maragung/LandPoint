@@ -611,4 +611,29 @@
     <string name="msg_offline_area_renamed">Nama diubah menjadi %1$s</string>
     <string name="msg_offline_area_deleted">Area dihapus: %1$s</string>
     <string name="msg_offline_cache_cleared">Cache penjelajahan dibersihkan</string>
+    <string name="boundary_preview">Pratinjau bentuk</string>
+    <string name="preview_title">Pratinjau bentuk</string>
+    <string name="preview_save">Simpan bentuk</string>
+    <string name="preview_back_edit">Kembali mengedit</string>
+    <string name="preview_empty">Tambahkan minimal satu sudut, lalu pratinjau bentuknya di sini.</string>
+    <string name="preview_auto_line">Garis tersambung otomatis mengikuti urutan sudut.</string>
+    <string name="corner_photo">Foto sudut</string>
+    <string name="corner_photo_take">Kamera</string>
+    <string name="corner_photo_pick">Galeri</string>
+    <string name="corner_photo_view">Lihat foto</string>
+    <plurals name="corner_photo_count">
+        <item quantity="one">%1$d foto sudut</item>
+        <item quantity="other">%1$d foto sudut</item>
+    </plurals>
+    <string name="corner_sheet_photo">Foto sudut</string>
+    <string name="walk_method_title">Ukur dengan cara apa?</string>
+    <string name="walk_method_dense">Jalan keliling (jejak padat)</string>
+    <string name="walk_method_dense_body">Rekam terus selama berjalan, lalu sederhanakan.</string>
+    <string name="walk_method_corners">Jalan dan kunci sudut</string>
+    <string name="walk_method_corners_body">Tentukan titik awal, lalu tekan Tandai sudut di setiap sudut.</string>
+    <string name="walk_mark_corner">Tandai sudut</string>
+    <string name="discard_title">Buang perubahan?</string>
+    <string name="discard_body">Sudut dan foto yang belum disimpan akan hilang.</string>
+    <string name="discard_keep">Lanjut mengedit</string>
+    <string name="discard_throw">Buang</string>
 </resources>

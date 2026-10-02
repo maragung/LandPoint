@@ -10,6 +10,7 @@ object Routes {
     const val EDIT = "land/{landId}/edit"
     // Deliberately not "land/new" — that would also match the DETAIL pattern.
     const val NEW = "land_new"
+    const val PREVIEW = "land_preview"
     const val COMPASS = "land/{landId}/compass"
     const val SHAPE = "land/{landId}/shape"
 

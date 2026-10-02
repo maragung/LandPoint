@@ -17,7 +17,7 @@ import java.util.UUID
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index(value = ["land_id"])]
+    indices = [Index(value = ["land_id"]), Index(value = ["corner_id"])]
 )
 data class PhotoEntity(
     @PrimaryKey
@@ -32,6 +32,16 @@ data class PhotoEntity(
 
     @ColumnInfo(name = "caption")
     val caption: String = "",
+
+    /**
+     * Stable [CornerPoint.id] this photo proves, or null for a general land photo.
+     *
+     * Bound by id (not by index) so reorder/insert/delete of corners never moves
+     * a photo onto the wrong corner. Null when the corner was deleted — the photo
+     * is kept as a general photo rather than silently dropped.
+     */
+    @ColumnInfo(name = "corner_id")
+    val cornerId: String? = null,
 
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis()

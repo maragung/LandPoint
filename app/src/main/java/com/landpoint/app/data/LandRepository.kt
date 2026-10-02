@@ -46,12 +46,33 @@ class LandRepository(
         dao.deleteAll()
     }
 
-    suspend fun addPhoto(landId: String, filePath: String, caption: String = "") {
-        dao.insertPhoto(PhotoEntity(landId = landId, filePath = filePath, caption = caption))
+    suspend fun addPhoto(
+        landId: String,
+        filePath: String,
+        caption: String = "",
+        cornerId: String? = null
+    ) {
+        dao.insertPhoto(
+            PhotoEntity(landId = landId, filePath = filePath, caption = caption, cornerId = cornerId)
+        )
+    }
+
+    /**
+     * Re-binds photos whose corner no longer exists to general photos instead of
+     * deleting them. Called on save after the boundary is known.
+     */
+    suspend fun detachPhotosFromMissingCorners(landId: String, cornerIds: Set<String>) {
+        dao.getPhotosFor(landId)
+            .filter { it.cornerId != null && it.cornerId !in cornerIds }
+            .forEach { dao.updatePhotoCorner(it.id, null) }
     }
 
     suspend fun setPhotoCaption(photoId: String, caption: String) {
         dao.updatePhotoCaption(photoId, caption)
+    }
+
+    suspend fun setPhotoCorner(photoId: String, cornerId: String?) {
+        dao.updatePhotoCorner(photoId, cornerId)
     }
 
     suspend fun removePhoto(photo: Photo) {

@@ -632,4 +632,29 @@
     <string name="msg_offline_area_renamed">Renamed to %1$s</string>
     <string name="msg_offline_area_deleted">Area deleted: %1$s</string>
     <string name="msg_offline_cache_cleared">Browsing cache cleared</string>
+    <string name="boundary_preview">Preview shape</string>
+    <string name="preview_title">Shape preview</string>
+    <string name="preview_save">Save shape</string>
+    <string name="preview_back_edit">Back to editing</string>
+    <string name="preview_empty">Add at least one corner, then preview the shape here.</string>
+    <string name="preview_auto_line">Lines connect the corners in order automatically.</string>
+    <string name="corner_photo">Corner photo</string>
+    <string name="corner_photo_take">Camera</string>
+    <string name="corner_photo_pick">Gallery</string>
+    <string name="corner_photo_view">View photos</string>
+    <plurals name="corner_photo_count">
+        <item quantity="one">%1$d corner photo</item>
+        <item quantity="other">%1$d corner photos</item>
+    </plurals>
+    <string name="corner_sheet_photo">Corner photos</string>
+    <string name="walk_method_title">How to measure?</string>
+    <string name="walk_method_dense">Walk the edge (dense track)</string>
+    <string name="walk_method_dense_body">Record continuously while you walk around, then simplify.</string>
+    <string name="walk_method_corners">Walk and lock corners</string>
+    <string name="walk_method_corners_body">Set a start point, then tap Mark corner at every corner you reach.</string>
+    <string name="walk_mark_corner">Mark corner</string>
+    <string name="discard_title">Discard changes?</string>
+    <string name="discard_body">Unsaved corners and photos will be lost.</string>
+    <string name="discard_keep">Keep editing</string>
+    <string name="discard_throw">Discard</string>
 </resources>

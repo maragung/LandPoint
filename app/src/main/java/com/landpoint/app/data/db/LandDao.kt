@@ -101,6 +101,12 @@ interface LandDao {
     @Query("UPDATE photos SET caption = :caption WHERE id = :id")
     suspend fun updatePhotoCaption(id: String, caption: String)
 
+    @Query("UPDATE photos SET corner_id = :cornerId WHERE id = :id")
+    suspend fun updatePhotoCorner(id: String, cornerId: String?)
+
+    @Query("SELECT * FROM photos WHERE land_id = :landId AND corner_id = :cornerId ORDER BY created_at ASC")
+    suspend fun getPhotosForCorner(landId: String, cornerId: String): List<PhotoEntity>
+
     @Query("DELETE FROM photos WHERE id = :id")
     suspend fun deletePhotoById(id: String)
 

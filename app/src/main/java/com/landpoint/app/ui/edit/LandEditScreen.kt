@@ -1,6 +1,7 @@
 package com.landpoint.app.ui.edit
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -99,8 +100,19 @@ import kotlin.math.roundToInt
 fun LandEditScreen(
     onDone: (String) -> Unit,
     onCancel: () -> Unit,
+    onPreview: () -> Unit = {},
+    previewSaveSignal: Boolean = false,
+    onPreviewSaveConsumed: () -> Unit = {},
     viewModel: LandEditViewModel = viewModel(factory = LandEditViewModel.Factory)
 ) {
+    // Raised by the preview screen's Save button: the draft belongs to this
+    // editor, so saving happens here once navigation has returned.
+    LaunchedEffect(previewSaveSignal) {
+        if (previewSaveSignal) {
+            onPreviewSaveConsumed()
+            viewModel.save(onDone)
+        }
+    }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHost = remember { SnackbarHostState() }
     val noCameraMessage = stringResource(R.string.msg_no_camera_app)
@@ -140,12 +152,92 @@ fun LandEditScreen(
         val file = pendingCapture
         pendingCapture = null
         if (success && file != null) viewModel.onPhotoCaptured(file)
+        else viewModel.requestPhotoForCorner(null)
     }
 
     val pickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
-        uri?.let { viewModel.onPhotoPicked(it) }
+        if (uri != null) viewModel.onPhotoPicked(uri)
+        else viewModel.requestPhotoForCorner(null)
+    }
+
+    // Any back/exit while the form holds corners, photos or text asks first.
+    var showDiscard by remember { mutableStateOf(false) }
+    val tryCancel: () -> Unit = { if (state.isDirty) showDiscard = true else onCancel() }
+    BackHandler(enabled = state.isDirty) { showDiscard = true }
+    if (showDiscard) {
+        AlertDialog(
+            onDismissRequest = { showDiscard = false },
+            title = { Text(stringResource(R.string.discard_title)) },
+            text = { Text(stringResource(R.string.discard_body)) },
+            confirmButton = {
+                TextButton(onClick = { showDiscard = false }) {
+                    Text(stringResource(R.string.discard_keep))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscard = false; onCancel() }) {
+                    Text(stringResource(R.string.discard_throw))
+                }
+            }
+        )
+    }
+
+    // Walk-method chooser: dense track vs walk-and-lock-corners.
+    var showWalkMethod by remember { mutableStateOf(false) }
+    if (showWalkMethod) {
+        AlertDialog(
+            onDismissRequest = { showWalkMethod = false },
+            title = { Text(stringResource(R.string.walk_method_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(R.string.walk_method_dense_body),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        stringResource(R.string.walk_method_corners_body),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showWalkMethod = false
+                    withLocation {
+                        askForNotifications()
+                        viewModel.startWalk()
+                    }
+                }) { Text(stringResource(R.string.walk_method_dense)) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showWalkMethod = false
+                    withLocation(viewModel::openCornerPickerAtFix)
+                }) { Text(stringResource(R.string.walk_method_corners)) }
+            }
+        )
+    }
+
+    // Which corner the photo sheet is for (null = general photo choice).
+    var photoCornerIndex by remember { mutableStateOf<Int?>(null) }
+    val takeGeneralPhoto: () -> Unit = {
+        viewModel.requestPhotoForCorner(null)
+        val (file, uri) = viewModel.newCameraTarget()
+        val launched = runCatching { cameraLauncher.launch(uri) }.isSuccess
+        pendingCapture = if (launched) file else null
+        if (!launched) viewModel.showMessage(noCameraMessage)
+    }
+    val pickGeneralPhoto: () -> Unit = {
+        viewModel.requestPhotoForCorner(null)
+        runCatching {
+            pickerLauncher.launch(
+                androidx.activity.result.PickVisualMediaRequest(
+                    ActivityResultContracts.PickVisualMedia.ImageOnly
+                )
+            )
+        }.onFailure { viewModel.showMessage(noPickerMessage) }
     }
 
     // Skipped while the map picker is up: it draws over this screen, taking the
@@ -203,7 +295,7 @@ fun LandEditScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onCancel) {
+                    IconButton(onClick = tryCancel) {
                         Icon(
                             Icons.Default.Close,
                             contentDescription = stringResource(R.string.action_cancel)
@@ -273,52 +365,71 @@ fun LandEditScreen(
                     state = state,
                     onMarkAtFix = { withLocation(viewModel::openCornerPickerAtFix) },
                     onPickOnMap = viewModel::openCornerPicker,
+                    onPreview = {
+                        viewModel.writePreviewDraft()
+                        onPreview()
+                    },
                     onUndo = viewModel::undoBoundaryPoint,
                     onClear = viewModel::clearBoundary,
                     // The notification ask comes first: it is the walk's only control
                     // once the phone is locked, and asking now — with a walk about to
                     // start — is the one moment it explains itself.
-                    onStartWalk = {
-                        withLocation {
-                            askForNotifications()
-                            viewModel.startWalk()
-                        }
-                    },
+                    onStartWalk = { showWalkMethod = true },
                     onStopWalk = viewModel::stopWalk,
                     onUpdateCorner = viewModel::updateBoundaryPoint,
                     onRemoveCorner = viewModel::removeBoundaryPoint,
                     onMoveCornerUp = viewModel::moveBoundaryPointUp,
-                    onMoveCornerDown = viewModel::moveBoundaryPointDown
+                    onMoveCornerDown = viewModel::moveBoundaryPointDown,
+                    onCornerPhoto = { index -> photoCornerIndex = index }
                 )
             }
 
             FormSection {
                 PhotoSection(
                     photos = state.photos,
-                    onTakePhoto = {
-                        // The manifest declares the camera optional, so a device
-                        // may genuinely have no app to answer this intent. Letting
-                        // the resulting ActivityNotFoundException escape a click
-                        // handler would crash the screen.
-                        val (file, uri) = viewModel.newCameraTarget()
-                        val launched = runCatching {
-                            cameraLauncher.launch(uri)
-                        }.isSuccess
-                        pendingCapture = if (launched) file else null
-                        if (!launched) viewModel.showMessage(noCameraMessage)
-                    },
-                    onPickPhoto = {
-                        runCatching {
-                            pickerLauncher.launch(
-                                androidx.activity.result.PickVisualMediaRequest(
-                                    ActivityResultContracts.PickVisualMedia.ImageOnly
-                                )
-                            )
-                        }.onFailure { viewModel.showMessage(noPickerMessage) }
-                    },
+                    onTakePhoto = { takeGeneralPhoto() },
+                    onPickPhoto = { pickGeneralPhoto() },
                     onRemove = viewModel::removePhoto,
                     onCaption = viewModel::setPhotoCaption
                 )
+            }
+
+            // Camera / gallery / view chooser for one corner. The target corner
+            // is set on the view model only when the user actually picks a
+            // source, so cancelling the sheet never reroutes the next photo.
+            photoCornerIndex?.let { index ->
+                val cornerId = state.cornerIds.getOrNull(index)
+                if (cornerId == null) {
+                    photoCornerIndex = null
+                } else {
+                    val count = state.photos.count { it.cornerId == cornerId }
+                    CornerPhotoSheet(
+                        number = index + 1,
+                        photoCount = count,
+                        onDismiss = { photoCornerIndex = null },
+                        onTake = {
+                            photoCornerIndex = null
+                            viewModel.requestPhotoForCorner(cornerId)
+                            val (file, uri) = viewModel.newCameraTarget()
+                            val launched = runCatching {
+                                cameraLauncher.launch(uri)
+                            }.isSuccess
+                            pendingCapture = if (launched) file else null
+                            if (!launched) viewModel.showMessage(noCameraMessage)
+                        },
+                        onPick = {
+                            photoCornerIndex = null
+                            viewModel.requestPhotoForCorner(cornerId)
+                            runCatching {
+                                pickerLauncher.launch(
+                                    androidx.activity.result.PickVisualMediaRequest(
+                                        ActivityResultContracts.PickVisualMedia.ImageOnly
+                                    )
+                                )
+                            }.onFailure { viewModel.showMessage(noPickerMessage) }
+                        }
+                    )
+                }
             }
 
             FormSection(stringResource(R.string.edit_section_notes)) {
@@ -540,6 +651,7 @@ private fun BoundarySection(
     state: LandEditUiState,
     onMarkAtFix: () -> Unit,
     onPickOnMap: () -> Unit,
+    onPreview: () -> Unit,
     onUndo: () -> Unit,
     onClear: () -> Unit,
     onStartWalk: () -> Unit,
@@ -547,7 +659,8 @@ private fun BoundarySection(
     onUpdateCorner: (Int, String, String) -> Int?,
     onRemoveCorner: (Int) -> Unit,
     onMoveCornerUp: (Int) -> Unit,
-    onMoveCornerDown: (Int) -> Unit
+    onMoveCornerDown: (Int) -> Unit,
+    onCornerPhoto: (Int) -> Unit
 ) {
     val areaUnit = state.areaUnit
     // While a walk records, every other boundary control edits a shape that is
@@ -611,6 +724,21 @@ private fun BoundarySection(
             )
         }
 
+        // Preview: see the auto-connected shape on its own screen before saving.
+        if (state.boundary.isNotEmpty()) {
+            OutlinedButton(onClick = onPreview, enabled = !busy) {
+                Icon(
+                    Icons.Outlined.Image,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    "  " + stringResource(R.string.boundary_preview),
+                    style = MaterialTheme.typography.labelLarge
+                )
+            }
+        }
+
         WalkControls(state = state, onStartWalk = onStartWalk, onStopWalk = onStopWalk)
 
         if (state.boundary.isNotEmpty()) {
@@ -627,11 +755,14 @@ private fun BoundarySection(
 
             CornerList(
                 boundary = state.boundary,
+                cornerIds = state.cornerIds,
+                photos = state.photos,
                 enabled = !busy,
                 onEdit = { index -> editingCorner = index },
                 onRemove = onRemoveCorner,
                 onMoveUp = onMoveCornerUp,
-                onMoveDown = onMoveCornerDown
+                onMoveDown = onMoveCornerDown,
+                onPhoto = onCornerPhoto
             )
         }
 
@@ -759,11 +890,14 @@ private fun formatBearing(degrees: Double): String =
 @Composable
 private fun CornerList(
     boundary: List<GeoPoint>,
+    cornerIds: List<String>,
+    photos: List<EditPhoto>,
     enabled: Boolean,
     onEdit: (Int) -> Unit,
     onRemove: (Int) -> Unit,
     onMoveUp: (Int) -> Unit,
-    onMoveDown: (Int) -> Unit
+    onMoveDown: (Int) -> Unit,
+    onPhoto: (Int) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     var sheetFor by remember { mutableStateOf<Int?>(null) }
@@ -841,6 +975,17 @@ private fun CornerList(
                         )
                     }
                 }
+                val cornerId = cornerIds.getOrNull(index)
+                val photoCount = if (cornerId == null) 0
+                    else photos.count { it.cornerId == cornerId }
+                CornerAction(
+                    icon = Icons.Outlined.PhotoCamera,
+                    description = stringResource(R.string.corner_photo) + " ${index + 1}" +
+                        if (photoCount > 0) " ($photoCount)" else "",
+                    enabled = enabled,
+                    onClick = { onPhoto(index) },
+                    highlight = photoCount > 0
+                )
                 CornerAction(
                     icon = Icons.Default.ArrowUpward,
                     description = stringResource(R.string.boundary_corner_up, index + 1),
@@ -876,6 +1021,10 @@ private fun CornerList(
                 sheetFor = null
                 onEdit(index)
             },
+            onPhoto = {
+                sheetFor = null
+                onPhoto(index)
+            },
             onRemove = {
                 sheetFor = null
                 onRemove(index)
@@ -897,10 +1046,62 @@ private fun CornerAction(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
     enabled: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    highlight: Boolean = false
 ) {
     IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(48.dp)) {
-        Icon(icon, contentDescription = description, modifier = Modifier.size(20.dp))
+        if (highlight) {
+            Icon(
+                icon,
+                contentDescription = description,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        } else {
+            Icon(icon, contentDescription = description, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+/**
+ * Camera / gallery chooser for one corner. Cancelling sets nothing, so the next
+ * photo never lands on the wrong corner.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CornerPhotoSheet(
+    number: Int,
+    photoCount: Int,
+    onDismiss: () -> Unit,
+    onTake: () -> Unit,
+    onPick: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = 12.dp)
+        ) {
+            Text(
+                stringResource(R.string.corner_sheet_title, number) +
+                    if (photoCount > 0) " · " + stringResource(
+                        R.plurals.corner_photo_count, photoCount, photoCount
+                    ) else "",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+            )
+            SheetAction(
+                icon = Icons.Outlined.PhotoCamera,
+                label = stringResource(R.string.corner_photo_take),
+                onClick = onTake
+            )
+            SheetAction(
+                icon = Icons.Outlined.Image,
+                label = stringResource(R.string.corner_photo_pick),
+                onClick = onPick
+            )
+        }
     }
 }
 
@@ -911,6 +1112,7 @@ private fun CornerActionsSheet(
     number: Int,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
+    onPhoto: () -> Unit,
     onRemove: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -929,6 +1131,11 @@ private fun CornerActionsSheet(
                 icon = Icons.Outlined.Edit,
                 label = stringResource(R.string.corner_sheet_edit),
                 onClick = onEdit
+            )
+            SheetAction(
+                icon = Icons.Outlined.PhotoCamera,
+                label = stringResource(R.string.corner_sheet_photo),
+                onClick = onPhoto
             )
             SheetAction(
                 icon = Icons.Outlined.Delete,

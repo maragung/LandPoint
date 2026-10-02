@@ -18,6 +18,8 @@ import com.landpoint.app.data.StampData
 import com.landpoint.app.data.model.GeometryCodec
 import com.landpoint.app.data.model.GeometryType
 import com.landpoint.app.data.model.LandEntity
+import com.landpoint.app.data.model.toCorners
+import com.landpoint.app.data.model.toGeoPoints
 import com.landpoint.app.location.AveragedFix
 import com.landpoint.app.location.FixQuality
 import com.landpoint.app.location.FixSource
@@ -53,7 +55,12 @@ data class EditPhoto(
      * other patch of ground a year later, so this is what turns the picture into
      * a record of something.
      */
-    val caption: String = ""
+    val caption: String = "",
+    /**
+     * Stable corner id this photo proves, or null for a general land photo.
+     * Bound by id so reorder/insert/delete never moves it onto the wrong corner.
+     */
+    val cornerId: String? = null
 )
 
 /**
@@ -106,6 +113,17 @@ data class LandEditUiState(
     /** Distance unit for the walk readout, from the same setting the list uses. */
     val units: SettingsRepository.Units = SettingsRepository.Units.METRIC,
     val boundary: List<GeoPoint> = emptyList(),
+    /**
+     * Stable id per corner in [boundary], same order and size. Generated on
+     * load (old geometry has none) and on every insert; preserved on reorder
+     * and edit so corner photos stay on their corner.
+     */
+    val cornerIds: List<String> = emptyList(),
+    /**
+     * Which corner the next camera/gallery pick belongs to, or null for a
+     * general land photo. Set by the corner photo button, consumed on capture.
+     */
+    val pendingPhotoCornerId: String? = null,
     val isCapturingCorner: Boolean = false,
     val cornerSamples: Int = 0,
     /** True while the map corner picker is on screen. */
@@ -203,6 +221,12 @@ data class LandEditUiState(
 
     /** The draft as plain points — what the map draws and what commit writes back. */
     val draftPoints: List<GeoPoint> get() = draftBoundary.map { it.point }
+
+    /** True when the form holds anything worth confirming before throwing away. */
+    val isDirty: Boolean
+        get() = name.isNotBlank() || description.isNotBlank() || notes.isNotBlank() ||
+            parcelNumber.isNotBlank() || boundary.isNotEmpty() || photos.isNotEmpty() ||
+            draftBoundary.isNotEmpty() || pendingMark != null
 
     /** Position in the drawn ring of the selected corner, counting from 1. */
     val selectedCornerNumber: Int?
@@ -325,6 +349,7 @@ class LandEditViewModel(
     private fun load(id: String) {
         viewModelScope.launch {
             repository.getLand(id)?.let { land ->
+                val corners = GeometryCodec.decodeCorners(land.geometryJson)
                 // copy() rather than a fresh state so the area unit collected in
                 // init survives whichever of the two arrives second.
                 _uiState.update { current ->
@@ -339,11 +364,66 @@ class LandEditViewModel(
                         altitude = land.altitude,
                         accuracy = land.accuracy,
                         address = land.address,
-                        photos = land.photos.map { EditPhoto(it.filePath, it.id, it.caption) },
-                        boundary = land.boundary,
+                        photos = land.photos.map {
+                            EditPhoto(it.filePath, it.id, it.caption, it.cornerId)
+                        },
+                        boundary = corners.toGeoPoints().ifEmpty { land.boundary },
+                        cornerIds = corners.map { it.id }.ifEmpty {
+                            land.boundary.map { newCornerId() }
+                        },
                         createdAt = land.createdAt
                     )
                 }
+            }
+        }
+    }
+
+    /** Photos proving the given corner, oldest first. */
+    fun photosForCorner(cornerId: String): List<EditPhoto> =
+        _uiState.value.photos.filter { it.cornerId == cornerId }
+
+    /** Which corner the next camera/gallery pick will belong to (null = general). */
+    fun requestPhotoForCorner(cornerId: String?) {
+        _uiState.update { it.copy(pendingPhotoCornerId = cornerId) }
+    }
+
+    /**
+     * Snapshots the current draft for the preview screen: stable corner ids plus
+     * how many photos each corner holds. Preview only reads.
+     */
+    fun writePreviewDraft() {
+        val state = _uiState.value
+        val corners = state.boundary.toCorners(state.cornerIds.ifEmpty { null })
+        val counts = state.photos
+            .mapNotNull { it.cornerId }
+            .groupingBy { it }
+            .eachCount()
+        com.landpoint.app.ui.preview.PreviewDraftStore.set(state.name, corners, counts)
+    }
+
+    /**
+     * Re-binds an existing photo to another corner (or to general when null).
+     * Photos with a row are written through at once; unsaved ones are held in
+     * state until [save].
+     */
+    fun setPhotoCorner(photo: EditPhoto, cornerId: String?) {
+        viewModelScope.launch {
+            photo.persistedId?.let { id ->
+                val landId = _uiState.value.id
+                if (landId != null) {
+                    try {
+                        _uiState.value.id?.let {
+                            repository.setPhotoCorner(id, cornerId)
+                        }
+                    } catch (_: Exception) { /* keep state-only on failure */ }
+                }
+            }
+            _uiState.update { state ->
+                state.copy(
+                    photos = state.photos.map {
+                        if (it.path == photo.path) it.copy(cornerId = cornerId) else it
+                    }
+                )
             }
         }
     }
@@ -406,7 +486,10 @@ class LandEditViewModel(
     fun undoBoundaryPoint() {
         _uiState.update {
             if (it.boundary.isEmpty()) it
-            else it.copy(boundary = it.boundary.dropLast(1))
+            else it.copy(
+                boundary = it.boundary.dropLast(1),
+                cornerIds = it.cornerIds.dropLast(1)
+            )
         }
     }
 
@@ -447,6 +530,7 @@ class LandEditViewModel(
                 walkedM = 0.0,
                 walkPoints = 0,
                 boundary = emptyList(),
+                cornerIds = emptyList(),
                 message = strings.get(R.string.msg_walk_started)
             )
         }
@@ -522,6 +606,7 @@ class LandEditViewModel(
                     walkPoints = closed.size,
                     walkedM = state.walkedM,
                     boundary = closed,
+                    cornerIds = closed.map { newCornerId() },
                     message = strings.plural(R.plurals.msg_walk_done, closed.size)
                 )
             }
@@ -531,7 +616,26 @@ class LandEditViewModel(
     fun clearBoundary() {
         cornerJob?.cancel()
         _uiState.update {
-            it.copy(boundary = emptyList(), isCapturingCorner = false, cornerSamples = 0)
+            it.copy(
+                boundary = emptyList(),
+                cornerIds = emptyList(),
+                isCapturingCorner = false,
+                cornerSamples = 0
+            )
+        }
+    }
+
+    /**
+     * Corner-walk mode: lock one averaged corner per tap while walking instead
+     * of recording a dense track. Kept separate from [startWalk] so the user
+     * picks the method that fits the plot.
+     */
+    fun markWalkCorner(point: GeoPoint) {
+        _uiState.update {
+            it.copy(
+                boundary = it.boundary + point,
+                cornerIds = it.cornerIds + newCornerId()
+            )
         }
     }
 
@@ -562,9 +666,34 @@ class LandEditViewModel(
         return null
     }
 
+    /**
+     * Removes one corner. Photos bound to it are kept as general photos rather
+     * than deleted — the proof still exists, only its corner is gone.
+     */
     fun removeBoundaryPoint(index: Int) {
         if (boundaryEditsBlocked()) return
-        _uiState.update { it.copy(boundary = BoundaryEdits.removeAt(it.boundary, index)) }
+        val doomed = _uiState.value.cornerIds.getOrNull(index)
+        _uiState.update {
+            it.copy(
+                boundary = BoundaryEdits.removeAt(it.boundary, index),
+                cornerIds = it.cornerIds.toMutableList().also { ids ->
+                    if (index in ids.indices) ids.removeAt(index)
+                },
+                photos = if (doomed == null) it.photos else it.photos.map { photo ->
+                    if (photo.cornerId == doomed) photo.copy(cornerId = null) else photo
+                }
+            )
+        }
+        if (doomed != null) persistDetachedCornerPhotos(doomed)
+    }
+
+    private fun persistDetachedCornerPhotos(cornerId: String) {
+        viewModelScope.launch {
+            val landId = _uiState.value.id ?: return@launch
+            repository.getLand(landId)?.photos
+                ?.filter { it.cornerId == cornerId }
+                ?.forEach { repository.setPhotoCorner(it.id, null) }
+        }
     }
 
     fun moveBoundaryPointUp(index: Int) = swapBoundaryPoints(index, index - 1)
@@ -573,7 +702,14 @@ class LandEditViewModel(
 
     private fun swapBoundaryPoints(from: Int, to: Int) {
         if (boundaryEditsBlocked()) return
-        _uiState.update { it.copy(boundary = BoundaryEdits.swap(it.boundary, from, to)) }
+        _uiState.update {
+            it.copy(
+                boundary = BoundaryEdits.swap(it.boundary, from, to),
+                // Ids travel with their corner: swapping both keeps every photo
+                // on the corner it proves.
+                cornerIds = BoundaryEdits.swapStrings(it.cornerIds, from, to)
+            )
+        }
     }
 
     /**
@@ -653,9 +789,14 @@ class LandEditViewModel(
 
         val explain = !cornerHintDone
         _uiState.update {
+            // Reuse the stable corner ids so photos stay bound while editing on
+            // the map; only genuinely new corners (no id yet) get a fresh one.
+            val draft = it.boundary.mapIndexed { index, point ->
+                DraftCorner(it.cornerIds.getOrNull(index) ?: newCornerId(), point)
+            }
             it.copy(
                 isPickerOpen = true,
-                draftBoundary = it.boundary.map { point -> DraftCorner(newCornerId(), point) },
+                draftBoundary = draft,
                 selectedCornerId = null,
                 pendingMark = null,
                 markToleranceM = 0.0,
@@ -702,6 +843,7 @@ class LandEditViewModel(
         _uiState.update {
             it.copy(
                 boundary = it.draftPoints,
+                cornerIds = it.draftBoundary.map { corner -> corner.id },
                 draftBoundary = emptyList(),
                 selectedCornerId = null,
                 isPickerOpen = false,
@@ -1198,19 +1340,34 @@ class LandEditViewModel(
         }
     }
 
-    /** Writes a photo row immediately for a saved land; otherwise defers to [save]. */
+    /**
+     * Writes a photo row immediately for a saved land; otherwise defers to [save].
+     * Carries [LandEditUiState.pendingPhotoCornerId] so a photo taken from a
+     * corner button is bound to that corner, then clears the pending target.
+     */
     private suspend fun attachPhoto(path: String) {
         val state = _uiState.value
         val id = state.id
+        val cornerId = state.pendingPhotoCornerId
         if (state.isEdit && id != null) {
-            repository.addPhoto(id, path)
+            repository.addPhoto(id, path, cornerId = cornerId)
             repository.getLand(id)?.let { land ->
                 _uiState.update { s ->
-                    s.copy(photos = land.photos.map { EditPhoto(it.filePath, it.id, it.caption) })
+                    s.copy(
+                        photos = land.photos.map {
+                            EditPhoto(it.filePath, it.id, it.caption, it.cornerId)
+                        },
+                        pendingPhotoCornerId = null
+                    )
                 }
             }
         } else {
-            _uiState.update { it.copy(photos = it.photos + EditPhoto(path)) }
+            _uiState.update {
+                it.copy(
+                    photos = it.photos + EditPhoto(path, cornerId = cornerId),
+                    pendingPhotoCornerId = null
+                )
+            }
         }
     }
 
@@ -1285,6 +1442,11 @@ class LandEditViewModel(
             val id = state.id ?: UUID.randomUUID().toString()
             val boundary = state.boundary
             val polygon = boundary.size >= 3
+            // Stable ids travel with the geometry so corner photos survive a
+            // later reorder; old drafts without ids get fresh ones here.
+            val corners = boundary.toCorners(
+                state.cornerIds.ifEmpty { null }
+            )
             // A polygon's pin is the middle of the land, not the spot the phone
             // was standing on when the first corner was taken — that can easily
             // be outside the plot, which puts the list, the map and "navigate
@@ -1302,7 +1464,7 @@ class LandEditViewModel(
                 address = state.address,
                 parcelNumber = state.parcelNumber.trim().ifBlank { null },
                 geometryType = if (polygon) GeometryType.POLYGON else GeometryType.POINT,
-                geometryJson = if (polygon) GeometryCodec.encode(boundary) else null,
+                geometryJson = if (polygon) GeometryCodec.encodeCorners(corners) else null,
                 areaSqm = if (polygon) PolygonMath.areaSqm(boundary) else null,
                 createdAt = state.createdAt ?: now,
                 updatedAt = now
@@ -1311,10 +1473,18 @@ class LandEditViewModel(
 
             // Photos taken before the very first save have no row yet.
             state.photos.filter { it.persistedId == null }
-                .forEach { repository.addPhoto(id, it.path, it.caption) }
+                .forEach { repository.addPhoto(id, it.path, it.caption, it.cornerId) }
+            if (state.isEdit || state.id != null) {
+                repository.detachPhotosFromMissingCorners(id, corners.map { it.id }.toSet())
+            }
 
             _uiState.update {
-                it.copy(isSaving = false, id = id, createdAt = entity.createdAt)
+                it.copy(
+                    isSaving = false,
+                    id = id,
+                    createdAt = entity.createdAt,
+                    cornerIds = corners.map { corner -> corner.id }
+                )
             }
             onSaved(id)
         }

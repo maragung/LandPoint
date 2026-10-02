@@ -24,6 +24,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -38,8 +40,12 @@ import com.landpoint.app.ui.lands.LandListScreen
 import com.landpoint.app.ui.map.MapScreen
 import com.landpoint.app.ui.navigation.Routes
 import com.landpoint.app.ui.offline.OfflineMapsScreen
+import com.landpoint.app.ui.preview.LandPreviewScreen
 import com.landpoint.app.ui.settings.SettingsScreen
 import com.landpoint.app.ui.shape.LandShapeScreen
+
+/** SavedStateHandle key: preview asked the editor to save its draft. */
+private const val PREVIEW_SAVE_KEY = "preview_save"
 
 /**
  * The three places a user comes back to. Everything else — a land's detail, the
@@ -196,7 +202,12 @@ private fun LandPointGraph(
             OfflineMapsScreen(onBack = { navController.popBackStack() })
         }
 
-        composable(Routes.NEW) {
+        composable(Routes.NEW) { entry ->
+            // Set by the preview screen when its Save button is pressed: the
+            // draft still belongs to this editor, so saving happens back here.
+            val previewSave by entry.savedStateHandle
+                .getStateFlow(PREVIEW_SAVE_KEY, false)
+                .collectAsState()
             LandEditScreen(
                 // Replace the editor with the saved record so Back lands on the list.
                 onDone = { id ->
@@ -204,7 +215,29 @@ private fun LandPointGraph(
                         popUpTo(Routes.NEW) { inclusive = true }
                     }
                 },
-                onCancel = { navController.popBackStack() }
+                onCancel = { navController.popBackStack() },
+                onPreview = { navController.navigate(Routes.PREVIEW) },
+                previewSaveSignal = previewSave,
+                onPreviewSaveConsumed = {
+                    entry.savedStateHandle[PREVIEW_SAVE_KEY] = false
+                }
+            )
+        }
+
+        composable(Routes.PREVIEW) {
+            LandPreviewScreen(
+                onBackToEdit = { navController.popBackStack() },
+                onSave = {
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set(PREVIEW_SAVE_KEY, true)
+                    navController.popBackStack()
+                },
+                onDiscard = {
+                    // Back to the editor first — it owns the confirm-and-exit —
+                    // then out to the list.
+                    navController.popBackStack()
+                }
             )
         }
 
@@ -217,10 +250,18 @@ private fun LandPointGraph(
             )
         }
 
-        composable(Routes.EDIT, arguments = landIdArg) {
+        composable(Routes.EDIT, arguments = landIdArg) { entry ->
+            val previewSave by entry.savedStateHandle
+                .getStateFlow(PREVIEW_SAVE_KEY, false)
+                .collectAsState()
             LandEditScreen(
                 onDone = { navController.popBackStack() },
-                onCancel = { navController.popBackStack() }
+                onCancel = { navController.popBackStack() },
+                onPreview = { navController.navigate(Routes.PREVIEW) },
+                previewSaveSignal = previewSave,
+                onPreviewSaveConsumed = {
+                    entry.savedStateHandle[PREVIEW_SAVE_KEY] = false
+                }
             )
         }
 

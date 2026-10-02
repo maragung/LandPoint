@@ -51,6 +51,19 @@ object BoundaryEdits {
     }
 
     /**
+     * Same swap for the parallel id list (see cornerIds): ids travel with their
+     * corner so photos stay bound by id across reorder.
+     */
+    fun swapStrings(ids: List<String>, i: Int, j: Int): List<String> {
+        if (i !in ids.indices || j !in ids.indices || i == j) return ids
+        return ids.toMutableList().apply {
+            val held = this[i]
+            this[i] = this[j]
+            this[j] = held
+        }
+    }
+
+    /**
      * True when [candidate] is far enough from every other corner to be a corner
      * of its own.
      *
